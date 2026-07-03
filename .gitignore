@@ -1,0 +1,6 @@
+#Docker
+.dockerimage
+compose.yaml
+
+#Environment variables
+.env.example
