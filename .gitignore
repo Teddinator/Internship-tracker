@@ -3,4 +3,4 @@
 compose.yaml
 
 #Environment variables
-.env.example
+.env
