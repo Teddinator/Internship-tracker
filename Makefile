@@ -11,3 +11,9 @@ goose_down:
 
 print_db:
 	@echo "$(DATABASE_URL)"
+
+compose_up:
+	docker compose up
+
+compose_down:
+	docker compose down
