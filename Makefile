@@ -9,6 +9,9 @@ goose_up:
 goose_down:
 	goose -dir migrations postgres ${DATABASE_URL} down	
 
+goose_reset:
+	goose -dir migrations postgres ${DATABASE_URL} reset	
+
 print_db:
 	@echo "$(DATABASE_URL)"
 
@@ -17,3 +20,6 @@ compose_up:
 
 compose_down:
 	docker compose down
+
+psql_db:
+	docker compose exec db psql -U postgres -d internship_tracker

@@ -8,20 +8,33 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
 )
 
-type application struct {
-	ID        int64  `json:"id"`
-	Company   string `json:"company"`
-	Role      string `json:"role"`
-	Status    string `json:"status"`
-	AppliedAt any    `json:"applied_at"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+type Application struct {
+	ID        int64      `json:"id"`
+	CompanyID string     `json:"company_id"`
+	Company   string     `json:"company"`
+	Role      string     `json:"role"`
+	Status    string     `json:"status"`
+	AppliedAt *time.Time `json:"applied_at"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+}
+
+type Company struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Website   string    `json:"website"`
+	Industry  string    `json:"industry"`
+	Location  string    `json:"location"`
+	Notes     string    `json:"notes"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type applicationServer struct {
@@ -76,24 +89,36 @@ func (app *applicationServer) healthHandler(w http.ResponseWriter, r *http.Reque
 }
 
 func (app *applicationServer) getApplicationsHandler(w http.ResponseWriter, r *http.Request) {
-	rows, err := app.db.Query(`
-		SELECT id, company, role, status, applied_at, created_at, updated_at
-		FROM applications
+	rows, err := app.db.QueryContext(r.Context(), `
+		SELECT
+			a.id,
+			a.company_id,
+			c.name,
+			a.role,
+			a.status,
+			a.applied_at,
+			a.created_at,
+			a.updated_at 
+		FROM applications AS a
+		JOIN companies AS c
+			ON c.id = a.company_id
 		ORDER BY id
 	`)
 	if err != nil {
+		log.Printf("failed to query applications: %v", err)
 		http.Error(w, "failed to query applications", http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
 
-	var applications []application
+	applications := make([]Application, 0)
 
 	for rows.Next() {
-		var a application
+		var a Application
 
 		err := rows.Scan(
 			&a.ID,
+			&a.CompanyID,
 			&a.Company,
 			&a.Role,
 			&a.Status,
@@ -115,7 +140,9 @@ func (app *applicationServer) getApplicationsHandler(w http.ResponseWriter, r *h
 	}
 
 	w.Header().Set("Content-type", "application/json")
-	json.NewEncoder(w).Encode(applications)
+	if err := json.NewEncoder(w).Encode(applications); err != nil {
+		log.Printf("failed to encode applications: %v", err)
+	}
 }
 
 func (app *applicationServer) getApplicationsByIDHandler(w http.ResponseWriter, r *http.Request) {
@@ -127,17 +154,28 @@ func (app *applicationServer) getApplicationsByIDHandler(w http.ResponseWriter, 
 		return
 	}
 
-	var a application
+	var a Application
 
 	err = app.db.QueryRowContext(
 		r.Context(),
 		`
-			SELECT id, company, role, status, applied_at, created_at, updated_at
-			FROM applications
-			WHERE id = $1
+			SELECT 
+				a.id,
+				a.company_id,
+				c.name,
+				a.role,
+				a.status,
+				a.applied_at,
+				a.created_at,
+				a.updated_at
+			FROM applications AS a
+			JOIN companies AS c
+				ON c.id = a.company_id
+			WHERE a.id = $1
 		`, id,
 	).Scan(
 		&a.ID,
+		&a.CompanyID,
 		&a.Company,
 		&a.Role,
 		&a.Status,
