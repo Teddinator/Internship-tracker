@@ -77,6 +77,10 @@ func main() {
 		r.Get("/{id}", app.getApplicationsByIDHandler)
 	})
 
+	router.Route("/companies", func(r chi.Router) {
+		r.Get("/", app.getCompaniesHandler)
+	})
+
 	log.Println("Server running at http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
@@ -203,5 +207,58 @@ func (app *applicationServer) getApplicationsByIDHandler(w http.ResponseWriter, 
 
 	if err := json.NewEncoder(w).Encode(a); err != nil {
 		log.Printf("failed to encode application :%v", err)
+	}
+}
+
+func (app *applicationServer) getCompaniesHandler(w http.ResponseWriter, r *http.Request) {
+	rows, err := app.db.QueryContext(r.Context(),
+		`
+			SELECT 
+			c.id,
+			c.name,
+			c.website,
+			c.industry,
+			c.location,
+			c.notes,
+			c.created_at,
+			c.updated_at
+			FROM companies AS c
+			ORDER BY id
+		`,
+	)
+
+	if err != nil {
+		http.Error(w, "Couldn't reterive companies", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	companies := make([]Company, 0)
+
+	for rows.Next() {
+		var c Company
+
+		err := rows.Scan(
+			&c.ID,
+			&c.Name,
+			&c.Website,
+			&c.Industry,
+			&c.Location,
+			&c.Notes,
+			&c.CreatedAt,
+			&c.UpdatedAt,
+		)
+
+		companies = append(companies, c)
+		if err != nil {
+			log.Printf("Failed to convert sql to json: %v", err)
+			http.Error(w, "Couldnt convert database entry to JSON", http.StatusInternalServerError)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(companies); err != nil {
+		log.Printf("Couldn't encode data: %v", err)
+		http.Error(w, "Couldn't encode data", http.StatusInternalServerError)
 	}
 }
