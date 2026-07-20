@@ -77,6 +77,7 @@ func main() {
 	})
 
 	router.Route("/applications", func(r chi.Router) {
+		r.Post("/", app.createApplicationHandler)
 		r.Get("/", app.getApplicationsHandler)
 		r.Get("/{id}", app.getApplicationsByIDHandler)
 	})
@@ -215,6 +216,150 @@ func (app *applicationServer) getApplicationsByIDHandler(w http.ResponseWriter, 
 
 	if err := json.NewEncoder(w).Encode(a); err != nil {
 		log.Printf("failed to encode application :%v", err)
+	}
+}
+
+func (app *applicationServer) createApplicationHandler(w http.ResponseWriter, r *http.Request) {
+
+	var input struct {
+		CompanyID string  `json:"company_id"`
+		Role      string  `json:"role"`
+		Status    string  `json:"status"`
+		AppliedAt *string `json:"applied_at"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&input); err != nil {
+		log.Printf("Failed to decode application request :%v", err)
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	input.CompanyID = strings.TrimSpace(input.CompanyID)
+	input.Role = strings.TrimSpace(input.Role)
+	input.Status = strings.TrimSpace(input.Status)
+
+	if input.CompanyID == "" {
+		http.Error(w, "company_id is required", http.StatusBadRequest)
+		return
+	}
+
+	companyID, err := uuid.Parse(input.CompanyID)
+	if err != nil {
+		http.Error(w, "company_id must be a valid UUID", http.StatusBadRequest)
+		return
+	}
+
+	if input.Role == "" {
+		http.Error(w, "role is required", http.StatusBadRequest)
+		return
+	}
+
+	if input.Status == "" {
+		input.Status = "applied"
+	}
+
+	allowedStatuses := map[string]bool{
+		"applied":   true,
+		"interview": true,
+		"offer":     true,
+		"rejected":  true,
+		"withdrawn": true,
+	}
+
+	if !allowedStatuses[input.Status] {
+		http.Error(w, "Invalid application status", http.StatusBadRequest)
+		return
+	}
+
+	var appliedAt *time.Time
+
+	if input.AppliedAt != nil {
+		value := strings.TrimSpace(*input.AppliedAt)
+
+		if value != "" {
+			parsed, err := time.Parse("2006-01-02", value)
+			if err != nil {
+				http.Error(w, "applied_at must use YYY-MM-DD format", http.StatusBadRequest)
+				return
+			}
+
+			appliedAt = &parsed
+		}
+	}
+
+	var a Application
+
+	err = app.db.QueryRowContext(r.Context(),
+		`
+			INSERT INTO applications (
+				company_id,
+				role,
+				status,
+				applied_at
+			)
+			VALUES ($1, $2, $3, $4)
+			RETURNING
+				id,
+				company_id,
+				role,
+				status,
+				applied_at,
+				created_at,
+				updated_at
+		`,
+		companyID,
+		input.Role,
+		input.Status,
+		appliedAt,
+	).Scan(
+		&a.ID,
+		&a.CompanyID,
+		&a.Role,
+		&a.Status,
+		&a.AppliedAt,
+		&a.CreatedAt,
+		&a.UpdatedAt,
+	)
+
+	if err != nil {
+		var pgErr *pgconn.PgError
+
+		// company_id points at a company that doesn't exist
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			http.Error(w, "Company not found", http.StatusNotFound)
+			return
+		}
+
+		log.Printf("Failed to create application : %v", err)
+		http.Error(w, "Failed to create application", http.StatusInternalServerError)
+		return
+	}
+
+	// Company field exist in JSON-model but not in application table. Get company name seperately.
+	err = app.db.QueryRowContext(
+		r.Context(),
+		`SELECT name FROM companies WHERE id = $1`,
+		companyID,
+	).Scan(&a.Company)
+
+	if err != nil {
+		log.Printf("failed to retrieve company name: %v", err)
+		http.Error(w, "Application was not created but response could not be built", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(
+		"Location",
+		fmt.Sprintf("/applications/%d", a.ID),
+	)
+	w.WriteHeader(http.StatusCreated)
+
+	if err := json.NewEncoder(w).Encode(a); err != nil {
+		log.Printf("failed to encode application response: %v", err)
 	}
 }
 
