@@ -81,6 +81,7 @@ func main() {
 		r.Get("/", app.getApplicationsHandler)
 		r.Get("/{id}", app.getApplicationsByIDHandler)
 		r.Put("/{id}", app.updateApplicationHandler)
+		r.Delete("/{id}", app.deleteApplicationHandler)
 	})
 
 	router.Route("/companies", func(r chi.Router) {
@@ -512,6 +513,44 @@ func (app *applicationServer) updateApplicationHandler(w http.ResponseWriter, r 
 		log.Printf("Failed to encode application: %v", err)
 		return
 	}
+}
+
+func (app *applicationServer) deleteApplicationHandler(w http.ResponseWriter, r *http.Request) {
+	idString := chi.URLParam(r, "id")
+
+	id, err := strconv.ParseInt(idString, 10, 64)
+
+	if err != nil {
+		http.Error(w, "Invalid application id", http.StatusBadRequest)
+		return
+	}
+
+	result, err := app.db.ExecContext(
+		r.Context(),
+		`	
+			DELETE FROM applications
+			WHERE id = $1
+		`, id,
+	)
+
+	if err != nil {
+		http.Error(w, "Failed to delete application", http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+
+	if err != nil {
+		http.Error(w, "failed to check deleted application", http.StatusInternalServerError)
+		return
+	}
+
+	if rowsAffected == 0 {
+		http.Error(w, "Application not found", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (app *applicationServer) getCompaniesHandler(w http.ResponseWriter, r *http.Request) {
