@@ -27,7 +27,10 @@ func NewHandler(db *sql.DB) *Handler {
 }
 
 func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.db.QueryContext(r.Context(), `
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	companyID := strings.TrimSpace(r.URL.Query().Get("company_id"))
+
+	query := `
 		SELECT
 			a.id,
 			a.company_id,
@@ -40,13 +43,54 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 		FROM applications AS a
 		JOIN companies AS c
 			ON c.id = a.company_id
-		ORDER BY id
-	`)
+		WHERE 1 = 1
+	`
+
+	args := make([]any, 0)
+
+	if status != "" {
+		allowedStatuses := map[string]bool{
+			"applied":   true,
+			"interview": true,
+			"offer":     true,
+			"rejected":  true,
+			"withdrawn": true,
+		}
+
+		if !allowedStatuses[status] {
+			http.Error(w, "Invalid application status", http.StatusBadRequest)
+			return
+		}
+
+		args = append(args, status)
+		query += fmt.Sprintf(" AND a.status = $%d", len(args))
+	}
+
+	if companyID != "" {
+		parsedCompanyID, err := uuid.Parse(companyID)
+		if err != nil {
+			http.Error(w, "company_id must be a valid UUID", http.StatusBadRequest)
+			return
+		}
+
+		args = append(args, parsedCompanyID)
+		query += fmt.Sprintf("AND a.company_id = $%d", len(args))
+	}
+
+	query += " ORDER BY a.id"
+
+	rows, err := h.db.QueryContext(
+		r.Context(),
+		query,
+		args...,
+	)
+
 	if err != nil {
 		log.Printf("failed to query applications: %v", err)
 		http.Error(w, "failed to query applications", http.StatusInternalServerError)
 		return
 	}
+
 	defer rows.Close()
 
 	applications := make([]Application, 0)
@@ -84,6 +128,7 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetAppByID(w http.ResponseWriter, r *http.Request) {
+
 	idString := chi.URLParam(r, "id")
 
 	id, err := strconv.ParseInt(idString, 10, 64)
