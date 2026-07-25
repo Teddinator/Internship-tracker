@@ -13,6 +13,7 @@ import (
 
 	"github.com/teddinator/Internship-tracker/internal/applications"
 	"github.com/teddinator/Internship-tracker/internal/companies"
+	"github.com/teddinator/Internship-tracker/internal/notes"
 )
 
 type applicationServer struct {
@@ -46,6 +47,7 @@ func main() {
 
 	applicationHandler := applications.NewHandler(db)
 	companiesHandler := companies.NewHandler(db)
+	notesHandler := notes.NewHandler(db)
 
 	router := chi.NewRouter()
 
@@ -59,6 +61,7 @@ func main() {
 		r.Post("/", applicationHandler.CreateApp)
 		r.Put("/{id}", applicationHandler.UpdateApp)
 		r.Delete("/{id}", applicationHandler.DeleteApp)
+		r.Post("/{id}/notes", notesHandler.CreateNote)
 	})
 
 	router.Route("/companies", func(r chi.Router) {
