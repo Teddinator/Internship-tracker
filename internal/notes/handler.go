@@ -101,3 +101,60 @@ func (h *Handler) CreateNote(w http.ResponseWriter, r *http.Request) {
 	}
 
 }
+
+func (h *Handler) GetNotes(w http.ResponseWriter, r *http.Request) {
+	idString := chi.URLParam(r, "id")
+
+	id, err := strconv.ParseInt(idString, 10, 64)
+
+	if err != nil {
+		http.Error(w, "ID must be a valid number", http.StatusBadRequest)
+		return
+	}
+
+	rows, err := h.db.QueryContext(
+		r.Context(),
+		`
+			SELECT * FROM notes
+			WHERE application_id = $1
+
+		`, id,
+	)
+
+	if err != nil {
+		http.Error(w, "Couldn't query database", http.StatusInternalServerError)
+		return
+	}
+
+	notes := make([]Note, 0)
+
+	for rows.Next() {
+		var n Note
+
+		err = rows.Scan(
+			&n.ID,
+			&n.ApplicationID,
+			&n.Content,
+			&n.CreatedAt,
+			&n.UpdatedAt,
+		)
+
+		if err != nil {
+			http.Error(w, "Couldn't convert database entry to JSON", http.StatusInternalServerError)
+			return
+		}
+
+		notes = append(notes, n)
+	}
+
+	if err := rows.Err(); err != nil {
+		http.Error(w, "Failed to read notes", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err = json.NewEncoder(w).Encode(notes); err != nil {
+		http.Error(w, "Failed to encode data", http.StatusInternalServerError)
+		return
+	}
+}

@@ -61,6 +61,7 @@ func main() {
 		r.Post("/", applicationHandler.CreateApp)
 		r.Put("/{id}", applicationHandler.UpdateApp)
 		r.Delete("/{id}", applicationHandler.DeleteApp)
+		r.Get("/{id}/notes", notesHandler.GetNotes)
 		r.Post("/{id}/notes", notesHandler.CreateNote)
 	})
 
