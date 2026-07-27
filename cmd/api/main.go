@@ -13,6 +13,7 @@ import (
 
 	"github.com/teddinator/Internship-tracker/internal/applications"
 	"github.com/teddinator/Internship-tracker/internal/companies"
+	"github.com/teddinator/Internship-tracker/internal/contacts"
 	"github.com/teddinator/Internship-tracker/internal/notes"
 )
 
@@ -48,6 +49,7 @@ func main() {
 	applicationHandler := applications.NewHandler(db)
 	companiesHandler := companies.NewHandler(db)
 	notesHandler := notes.NewHandler(db)
+	contactsHandler := contacts.NewHandler(db)
 
 	router := chi.NewRouter()
 
@@ -71,6 +73,13 @@ func main() {
 		r.Post("/", companiesHandler.CreateComp)
 		r.Put("/{id}", companiesHandler.UpdateComp)
 		r.Delete("/{id}", companiesHandler.DeleteComp)
+
+		r.Post("/{id}/contacts-debug", func(w http.ResponseWriter, r *http.Request) {
+			log.Printf("debug contact ID: %s", chi.URLParam(r, "id"))
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("dynamic contact route works"))
+		})
+		r.Post("/{id}/contacts", contactsHandler.CreateContact)
 	})
 
 	log.Println("Server running at http://localhost:8080")
