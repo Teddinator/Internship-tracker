@@ -73,13 +73,8 @@ func main() {
 		r.Post("/", companiesHandler.CreateComp)
 		r.Put("/{id}", companiesHandler.UpdateComp)
 		r.Delete("/{id}", companiesHandler.DeleteComp)
-
-		r.Post("/{id}/contacts-debug", func(w http.ResponseWriter, r *http.Request) {
-			log.Printf("debug contact ID: %s", chi.URLParam(r, "id"))
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("dynamic contact route works"))
-		})
 		r.Post("/{id}/contacts", contactsHandler.CreateContact)
+		r.Get("/{id}/contacts", contactsHandler.GetContacts)
 	})
 
 	log.Println("Server running at http://localhost:8080")

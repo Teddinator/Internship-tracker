@@ -126,3 +126,76 @@ func (h *Handler) CreateContact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+func (h *Handler) GetContacts(w http.ResponseWriter, r *http.Request) {
+	idString := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idString)
+	if err != nil {
+		http.Error(w, "CompanyID must be a valid UUID", http.StatusBadRequest)
+		return
+	}
+
+	rows, err := h.db.QueryContext(
+		r.Context(),
+		`
+			SELECT
+				c.id,
+				c.company_id,
+				c.name,
+				c.email,
+				c.linkedin_url,
+				c.role,
+				c.notes,
+				c.created_at,
+				c.updated_at
+			FROM contacts as c
+			WHERE c.company_id = $1
+			ORDER BY created_at DESC
+		`, id,
+	)
+
+	if err != nil {
+		log.Printf("Failed to retreive contacts: %v", err)
+		http.Error(w, "Unable to retreive contacts information", http.StatusInternalServerError)
+		return
+	}
+
+	defer rows.Close()
+
+	contacts := make([]Contact, 0)
+
+	for rows.Next() {
+		var c Contact
+
+		err = rows.Scan(
+			&c.ID,
+			&c.CompanyID,
+			&c.Name,
+			&c.Email,
+			&c.LinkedInURL,
+			&c.Role,
+			&c.Notes,
+			&c.CreatedAt,
+			&c.UpdatedAt,
+		)
+
+		if err != nil {
+			http.Error(w, "Failed to scan contacts", http.StatusInternalServerError)
+			return
+		}
+
+		contacts = append(contacts, c)
+	}
+
+	if err := rows.Err(); err != nil {
+		http.Error(w, "Failed to read contacts", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if err := json.NewEncoder(w).Encode(contacts); err != nil {
+		http.Error(w, "Failed to encode to JSON", http.StatusInternalServerError)
+		return
+	}
+}
