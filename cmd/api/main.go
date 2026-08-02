@@ -80,6 +80,10 @@ func main() {
 		r.Get("/{id}/contacts", contactsHandler.GetContacts)
 	})
 
+	router.Route("/followups", func(r chi.Router) {
+		r.Get("/due", followupsHandler.GetDueFollowUps)
+	})
+
 	log.Println("Server running at http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", router))
 }

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -96,6 +97,70 @@ func (h *handler) CreateFollowUp(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "Failed to encode data to JSON", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (h *handler) GetDueFollowUps(w http.ResponseWriter, r *http.Request) {
+	const query = `
+		SELECT
+			id,
+			application_id,
+			due_date,
+			message,
+			completed_at,
+			created_at,
+			updated_at
+		FROM followups
+		WHERE due_date <= CURRENT_DATE
+		AND completed_at IS NULL
+		ORDER BY due_date, created_at ASC
+	`
+	rows, err := h.db.QueryContext(
+		r.Context(),
+		query,
+	)
+
+	if err != nil {
+		http.Error(w, "Unable to query follow-ups", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	dueFollowUps := make([]FollowUpResponse, 0)
+
+	for rows.Next() {
+		var followUp FollowUp
+
+		err = rows.Scan(
+			&followUp.ID,
+			&followUp.ApplicationID,
+			&followUp.DueDate,
+			&followUp.Message,
+			&followUp.CompletedAt,
+			&followUp.CreatedAt,
+			&followUp.UpdatedAt,
+		)
+
+		if err != nil {
+			http.Error(w, "Failed to scan followups", http.StatusInternalServerError)
+			return
+		}
+
+		response := toFollowUpResponse(followUp)
+		dueFollowUps = append(dueFollowUps, response)
+	}
+
+	if err := rows.Err(); err != nil {
+		http.Error(w, "Failed while reading follow-ups", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(dueFollowUps); err != nil {
+		log.Printf("failed to encode due follow-ups: %v", err)
 		return
 	}
 }
