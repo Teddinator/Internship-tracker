@@ -92,7 +92,9 @@ func (h *handler) CreateFollowUp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 
-	if err := json.NewEncoder(w).Encode(followUp); err != nil {
+	response := toFollowUpResponse(followUp)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "Failed to encode data to JSON", http.StatusInternalServerError)
 		return
 	}
