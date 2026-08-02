@@ -2,7 +2,7 @@ package followups
 
 import "time"
 
-type Followup struct {
+type FollowUp struct {
 	ID            int64      `json:"id"`
 	ApplicationID int64      `json:"application_id"`
 	DueDate       time.Time  `json:"due_date"`
@@ -10,4 +10,9 @@ type Followup struct {
 	CompletedAt   *time.Time `json:"completed_at"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
+}
+
+type CreateFollowUpRequest struct {
+	DueDate string `json:"due_date"`
+	Message string `json:"message"`
 }

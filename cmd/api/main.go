@@ -14,6 +14,7 @@ import (
 	"github.com/teddinator/Internship-tracker/internal/applications"
 	"github.com/teddinator/Internship-tracker/internal/companies"
 	"github.com/teddinator/Internship-tracker/internal/contacts"
+	"github.com/teddinator/Internship-tracker/internal/followups"
 	"github.com/teddinator/Internship-tracker/internal/notes"
 )
 
@@ -50,6 +51,7 @@ func main() {
 	companiesHandler := companies.NewHandler(db)
 	notesHandler := notes.NewHandler(db)
 	contactsHandler := contacts.NewHandler(db)
+	followupsHandler := followups.NewHandler(db)
 
 	router := chi.NewRouter()
 
@@ -65,6 +67,7 @@ func main() {
 		r.Delete("/{id}", applicationHandler.DeleteApp)
 		r.Get("/{id}/notes", notesHandler.GetNotes)
 		r.Post("/{id}/notes", notesHandler.CreateNote)
+		r.Post("/{id}/followups", followupsHandler.CreateFollowUp)
 	})
 
 	router.Route("/companies", func(r chi.Router) {
