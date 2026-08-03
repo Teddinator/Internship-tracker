@@ -164,3 +164,66 @@ func (h *handler) GetDueFollowUps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+func (h *handler) CompleteFollowUp(w http.ResponseWriter, r *http.Request) {
+	idString := chi.URLParam(r, "id")
+
+	id, err := strconv.ParseInt(idString, 10, 64)
+	if err != nil {
+		http.Error(w, "id must be a valid integer", http.StatusBadRequest)
+		return
+	}
+
+	const query = `
+		UPDATE followups
+		SET completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
+			updated_at = CASE
+				WHEN completed_at IS NULL THEN CURRENT_TIMESTAMP
+				ELSE updated_at
+			END
+		WHERE id = $1
+		RETURNING 
+			id,
+			application_id,
+			due_date,
+			message,
+			completed_at,
+			created_at,
+			updated_at
+	`
+
+	var followUp FollowUp
+	err = h.db.QueryRowContext(
+		r.Context(),
+		query,
+		id,
+	).Scan(
+		&followUp.ID,
+		&followUp.ApplicationID,
+		&followUp.DueDate,
+		&followUp.Message,
+		&followUp.CompletedAt,
+		&followUp.CreatedAt,
+		&followUp.UpdatedAt,
+	)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "follow-up not found", http.StatusNotFound)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, "failed to complete follow-up", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "json/application")
+	w.WriteHeader(http.StatusOK)
+
+	response := toFollowUpResponse(followUp)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Failed top encode to JSON : %v", err)
+		return
+	}
+}
