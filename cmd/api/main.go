@@ -83,6 +83,7 @@ func main() {
 	router.Route("/followups", func(r chi.Router) {
 		r.Get("/due", followupsHandler.GetDueFollowUps)
 		r.Put("/{id}/complete", followupsHandler.CompleteFollowUp)
+		r.Delete("/{id}", followupsHandler.DeleteFollowUp)
 	})
 
 	log.Println("Server running at http://localhost:8080")

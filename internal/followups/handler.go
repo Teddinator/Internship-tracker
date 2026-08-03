@@ -227,3 +227,45 @@ func (h *handler) CompleteFollowUp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+func (h *handler) DeleteFollowUp(w http.ResponseWriter, r *http.Request) {
+	idString := chi.URLParam(r, "id")
+
+	id, err := strconv.ParseInt(idString, 10, 64)
+	if err != nil {
+		http.Error(w, "id must be a valid integer", http.StatusBadRequest)
+		return
+	}
+
+	const query = `
+		DELETE FROM followups
+		WHERE id = $1
+	`
+
+	result, err := h.db.ExecContext(
+		r.Context(),
+		query,
+		id,
+	)
+
+	if err != nil {
+		log.Printf("Failed to delete follow-up: %v", err)
+		http.Error(w, "Failed to delete follow-up", http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+
+	if err != nil {
+		log.Printf("failed to check affected rows: %v", err)
+		http.Error(w, "Failed to delete follow-up", http.StatusInternalServerError)
+		return
+	}
+
+	if rowsAffected == 0 {
+		http.Error(w, "follow-up not found", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
