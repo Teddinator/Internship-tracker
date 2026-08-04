@@ -2,4 +2,4 @@
 
 set -e
 
-docker compose run --rm app npm test
+docker compose run --rm api go test ./...
