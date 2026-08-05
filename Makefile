@@ -1,5 +1,14 @@
 include .env
 
+dev:
+	./scripts/dev.sh
+
+test:
+	./scripts/test.sh
+
+migrate-up:
+	./scripts/migrate-up.sh
+
 goose_status:
 	goose -dir migrations postgres ${DATABASE_URL} status	
 
@@ -14,9 +23,6 @@ goose_reset:
 
 print_db:
 	@echo "$(DATABASE_URL)"
-
-compose_up:
-	docker compose up
 
 compose_down:
 	docker compose down

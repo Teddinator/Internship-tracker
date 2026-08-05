@@ -86,8 +86,9 @@ func main() {
 		r.Delete("/{id}", followupsHandler.DeleteFollowUp)
 	})
 
+	port := os.Getenv("PORT")
 	log.Println("Server running at http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", router))
+	log.Fatal(http.ListenAndServe(":"+port, router))
 }
 
 func (app *applicationServer) healthHandler(w http.ResponseWriter, r *http.Request) {
