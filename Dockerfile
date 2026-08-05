@@ -16,9 +16,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     ./cmd/api
 
 # Runtime image
- FROM alpine:3.22
+FROM alpine:3.22
 
- RUN apk add --no-cache ca-certificates \
+RUN apk add --no-cache ca-certificates \
     && addgroup -S app \
     && adduser -S app -G app
 
