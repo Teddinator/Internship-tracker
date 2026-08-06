@@ -9,14 +9,14 @@ test:
 migrate-up:
 	./scripts/migrate-up.sh
 
+migrate-down:
+	./scripts/migrate-down.sh
+
+seed:
+	./scripts/seed.sh
+
 goose_status:
 	goose -dir migrations postgres ${DATABASE_URL} status	
-
-goose_up:
-	goose -dir migrations postgres ${DATABASE_URL} up	
-
-goose_down:
-	goose -dir migrations postgres ${DATABASE_URL} down	
 
 goose_reset:
 	goose -dir migrations postgres ${DATABASE_URL} reset	
