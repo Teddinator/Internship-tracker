@@ -2,6 +2,7 @@ package applications
 
 import (
 	"database/sql"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -519,4 +520,111 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) ExportCSV(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.db.QueryContext(
+		r.Context(),
+		`
+			SELECT
+				a.id,
+				a.company_id,
+				c.name,
+				a.role,
+				a.status,
+				a.applied_at,
+				a.created_at,
+				a.updated_at
+			FROM applications AS a
+			JOIN companies AS c
+				ON c.id = a.company_id
+			ORDER BY a.id	
+		`,
+	)
+	if err != nil {
+		log.Printf("Failed to query application for CSV export: %v", err)
+		http.Error(w, "failed to export applications", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	applications := make([]Application, 0)
+
+	for rows.Next() {
+		var a Application
+
+		if err := rows.Scan(
+			&a.ID,
+			&a.CompanyID,
+			&a.Company,
+			&a.Role,
+			&a.Status,
+			&a.AppliedAt,
+			&a.CreatedAt,
+			&a.UpdatedAt,
+		); err != nil {
+			log.Printf("Failed to scan application for CSV export: %v", err)
+			http.Error(w, "Failed to export applications", http.StatusInternalServerError)
+			return
+		}
+		applications = append(applications, a)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Printf("Failed while reading applications for CSV export: %v", err)
+		http.Error(w, "Failed to export applications", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "json/application")
+	w.Header().Set(
+		"Content-Disposition",
+		`attachment; filename="applications.csv"`,
+	)
+
+	writer := csv.NewWriter(w)
+
+	if err := writer.Write([]string{
+		"id",
+		"company_id",
+		"company",
+		"role",
+		"status",
+		"applied_at",
+		"created_at",
+		"updated_at",
+	}); err != nil {
+		log.Printf("Failed to write CSV header: %v", err)
+		return
+	}
+
+	for _, application := range applications {
+		appliedAt := ""
+
+		if application.AppliedAt != nil {
+			appliedAt = application.AppliedAt.Format("2006-01-02")
+		}
+
+		record := []string{
+			strconv.FormatInt(application.ID, 10),
+			application.CompanyID,
+			application.Company,
+			application.Role,
+			application.Status,
+			appliedAt,
+			application.CreatedAt.Format(time.RFC3339),
+			application.UpdatedAt.Format(time.RFC3339),
+		}
+
+		if err := writer.Write(record); err != nil {
+			log.Printf("Failed to write CSV record: %v", err)
+			return
+		}
+	}
+
+	writer.Flush()
+
+	if err := writer.Error(); err != nil {
+		log.Printf("Failed to complete CSV export: %v", err)
+	}
 }

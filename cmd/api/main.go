@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/joho/godotenv"
 
 	"github.com/teddinator/Internship-tracker/internal/applications"
 	"github.com/teddinator/Internship-tracker/internal/companies"
@@ -23,11 +22,6 @@ type applicationServer struct {
 }
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Println(".env file not found")
-	}
-
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		log.Fatal("DATABASE_URL is not set")
@@ -55,16 +49,17 @@ func main() {
 
 	router := chi.NewRouter()
 
-	router.Route("/health", func(r chi.Router) {
-		r.Get("/", app.healthHandler)
-	})
+	router.Get("/health", app.healthHandler)
 
 	router.Route("/applications", func(r chi.Router) {
 		r.Get("/", applicationHandler.GetAll)
-		r.Get("/{id}", applicationHandler.GetAppByID)
+		r.Get("/export.csv", applicationHandler.ExportCSV)
 		r.Post("/", applicationHandler.CreateApp)
+
+		r.Get("/{id}", applicationHandler.GetAppByID)
 		r.Put("/{id}", applicationHandler.UpdateApp)
 		r.Delete("/{id}", applicationHandler.DeleteApp)
+
 		r.Get("/{id}/notes", notesHandler.GetNotes)
 		r.Post("/{id}/notes", notesHandler.CreateNote)
 		r.Post("/{id}/followups", followupsHandler.CreateFollowUp)
@@ -87,8 +82,17 @@ func main() {
 	})
 
 	port := os.Getenv("PORT")
-	log.Println("Server running at http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":"+port, router))
+	if port == "" {
+		port = "8080"
+	}
+
+	address := ":" + port
+
+	log.Printf("Server listening at: %s", address)
+
+	if err := http.ListenAndServe(address, router); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func (app *applicationServer) healthHandler(w http.ResponseWriter, r *http.Request) {
