@@ -371,15 +371,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	allowedStatuses := map[string]bool{
-		"applied":   true,
-		"interview": true,
-		"offer":     true,
-		"rejected":  true,
-		"withdrawn": true,
-	}
-
-	if !allowedStatuses[input.Status] {
+	if !isValidStatus(input.Status) {
 		http.Error(w, "Invalid application status", http.StatusBadRequest)
 		return
 	}
