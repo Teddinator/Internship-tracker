@@ -15,6 +15,9 @@ migrate-down:
 seed:
 	./scripts/seed.sh
 
+backup-db:
+	./scripts/backup-db.sh
+
 goose_status:
 	goose -dir migrations postgres ${DATABASE_URL} status	
 
