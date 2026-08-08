@@ -96,7 +96,7 @@ func main() {
 }
 
 func (app *applicationServer) healthHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-type", "application/json")
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"status": "ok",
 	})
