@@ -50,19 +50,10 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 	args := make([]any, 0)
 
 	if status != "" {
-		allowedStatuses := map[string]bool{
-			"applied":   true,
-			"interview": true,
-			"offer":     true,
-			"rejected":  true,
-			"withdrawn": true,
-		}
-
-		if !allowedStatuses[status] {
+		if !isValidStatus(status) {
 			http.Error(w, "Invalid application status", http.StatusBadRequest)
 			return
 		}
-
 		args = append(args, status)
 		query += fmt.Sprintf(" AND a.status = $%d", len(args))
 	}
