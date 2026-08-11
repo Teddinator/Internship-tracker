@@ -196,6 +196,8 @@ A compressed PostgreSQL backup can be created with:
 Backups are stored in the local `backups/` directory and are not committed to Git.
 
 ## Project Structure
+
+```text
 .
 ├── cmd/
 │   └── api/
@@ -215,6 +217,7 @@ Backups are stored in the local `backups/` directory and are not committed to Gi
 ├── go.sum
 ├── Makefile
 └── README.md
+```
 
 ## Version
 
