@@ -1,6 +1,7 @@
 package applications
 
 import (
+	"context"
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
@@ -15,6 +16,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/teddinator/Internship-tracker/internal/apierror"
 )
 
 type Handler struct {
@@ -51,7 +54,12 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 
 	if status != "" {
 		if !isValidStatus(status) {
-			http.Error(w, "Invalid application status", http.StatusBadRequest)
+			apierror.Write(
+				w,
+				http.StatusBadRequest,
+				"invalid_application_id",
+				"application id must be a valid integer",
+			)
 			return
 		}
 		args = append(args, status)
@@ -61,7 +69,12 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 	if companyID != "" {
 		parsedCompanyID, err := uuid.Parse(companyID)
 		if err != nil {
-			http.Error(w, "company_id must be a valid UUID", http.StatusBadRequest)
+			apierror.Write(
+				w,
+				http.StatusBadRequest,
+				"invalid_company_id",
+				"company id must be a valid UUID",
+			)
 			return
 		}
 
@@ -78,9 +91,27 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		log.Printf("failed to query applications: %v", err)
-		http.Error(w, "failed to query applications", http.StatusInternalServerError)
-		return
+		switch {
+		case errors.Is(err, context.Canceled):
+			log.Printf("Request canceled while querying applications: %v", err)
+			return
+
+		case errors.Is(err, context.DeadlineExceeded):
+			log.Printf("database query timed out :%v", err)
+			apierror.Write(
+				w,
+				http.StatusGatewayTimeout,
+				"query_timeout",
+				"the request timed out",
+			)
+			return
+
+		default:
+			log.Printf("Failed to query application: %v", err)
+			apierror.Internal(w)
+			return
+		}
+
 	}
 
 	defer rows.Close()
@@ -90,7 +121,7 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var a Application
 
-		err := rows.Scan(
+		if err := rows.Scan(
 			&a.ID,
 			&a.CompanyID,
 			&a.Company,
@@ -99,9 +130,9 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 			&a.AppliedAt,
 			&a.CreatedAt,
 			&a.UpdatedAt,
-		)
-		if err != nil {
-			http.Error(w, "failed to scan application", http.StatusInternalServerError)
+		); err != nil {
+			log.Printf("scanm application row: %v", err)
+			apierror.Internal(w)
 			return
 		}
 
@@ -109,13 +140,14 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rows.Err(); err != nil {
-		http.Error(w, "failed to read applications", http.StatusInternalServerError)
+		log.Printf("iterate application rows: %v", err)
+		apierror.Internal(w)
 		return
 	}
 
 	w.Header().Set("Content-type", "application/json")
 	if err := json.NewEncoder(w).Encode(applications); err != nil {
-		log.Printf("failed to encode applications: %v", err)
+		log.Printf("encode applications response: %v", err)
 	}
 }
 
