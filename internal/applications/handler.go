@@ -375,7 +375,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		if value != "" {
 			parsed, err := time.Parse("2006-01-02", value)
 			if err != nil {
-				http.Error(w, "applied_at must use YYY-MM-DD format", http.StatusBadRequest)
+				http.Error(w, "applied_at must use YYYY-MM-DD format", http.StatusBadRequest)
 				return
 			}
 
