@@ -24,3 +24,20 @@ func Write(
 		Message: message,
 	})
 }
+
+func BadRequest(w http.ResponseWriter, code, message string) {
+	Write(w, http.StatusBadRequest, code, message)
+}
+
+func NotFound(w http.ResponseWriter, code, message string) {
+	Write(w, http.StatusNotFound, code, message)
+}
+
+func Internal(w http.ResponseWriter) {
+	Write(
+		w,
+		http.StatusInternalServerError,
+		"internal_error",
+		"an unexpected error occured",
+	)
+}
