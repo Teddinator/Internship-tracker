@@ -388,7 +388,11 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(idString, 10, 64)
 
 	if err != nil {
-		http.Error(w, "Invalid application ID", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"invalid_application_id",
+			"application id must be a valid integer",
+		)
 		return
 	}
 
@@ -403,7 +407,11 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(&input); err != nil {
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"invalid_json",
+			"request body contains invalid json",
+		)
 		return
 	}
 
