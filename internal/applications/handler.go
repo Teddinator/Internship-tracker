@@ -54,9 +54,8 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 
 	if status != "" {
 		if !isValidStatus(status) {
-			apierror.Write(
+			apierror.BadRequest(
 				w,
-				http.StatusBadRequest,
 				"invalid_application_id",
 				"application id must be a valid integer",
 			)
@@ -131,7 +130,7 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 			&a.CreatedAt,
 			&a.UpdatedAt,
 		); err != nil {
-			log.Printf("scanm application row: %v", err)
+			log.Printf("scan application row: %v", err)
 			apierror.Internal(w)
 			return
 		}
@@ -157,7 +156,11 @@ func (h *Handler) GetAppByID(w http.ResponseWriter, r *http.Request) {
 
 	id, err := strconv.ParseInt(idString, 10, 64)
 	if err != nil {
-		http.Error(w, "Invalid application id", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"Invalid application id",
+			"Application id must be an integer",
+		)
 		return
 	}
 
@@ -192,17 +195,17 @@ func (h *Handler) GetAppByID(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, "failed to query application", http.StatusNotFound)
+		apierror.NotFound(
+			w,
+			"Application_not_found",
+			"Application not found",
+		)
 		return
 	}
 
 	if err != nil {
-		log.Printf("failed to query application: %v", err)
-		http.Error(
-			w,
-			"failed to query application",
-			http.StatusInternalServerError,
-		)
+		log.Printf("query application: %d: %v", id, err)
+		apierror.Internal(w)
 		return
 	}
 
