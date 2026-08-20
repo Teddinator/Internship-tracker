@@ -229,8 +229,12 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(&input); err != nil {
-		log.Printf("Failed to decode application request :%v", err)
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		log.Printf("Decode application request :%v", err)
+		apierror.BadRequest(
+			w,
+			"invalid_json",
+			"request body contains invalid json",
+		)
 		return
 	}
 
@@ -239,18 +243,30 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	input.Status = strings.TrimSpace(input.Status)
 
 	if input.CompanyID == "" {
-		http.Error(w, "company_id is required", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"missing_company_id",
+			"company_id is required",
+		)
 		return
 	}
 
 	companyID, err := uuid.Parse(input.CompanyID)
 	if err != nil {
-		http.Error(w, "company_id must be a valid UUID", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"invalid_company_id",
+			"company_id must be a valid UUID",
+		)
 		return
 	}
 
 	if input.Role == "" {
-		http.Error(w, "role is required", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"missing_role",
+			"role is required",
+		)
 		return
 	}
 
@@ -259,7 +275,11 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !isValidStatus(input.Status) {
-		http.Error(w, "Invalid application status", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"invalid_status",
+			"status must be one of: applied, interview, offer, rejected, withdrawn",
+		)
 		return
 	}
 
@@ -271,7 +291,11 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 		if value != "" {
 			parsed, err := time.Parse("2006-01-02", value)
 			if err != nil {
-				http.Error(w, "applied_at must use YYY-MM-DD format", http.StatusBadRequest)
+				apierror.BadRequest(
+					w,
+					"invalid_applied_at",
+					"applied_at must use YYYY-MM-DD format",
+				)
 				return
 			}
 
@@ -318,16 +342,22 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 
 		// company_id points at a company that doesn't exist
 		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-			http.Error(w, "Company not found", http.StatusNotFound)
+			apierror.NotFound(
+				w,
+				"company_not_found",
+				"company_not_found",
+			)
 			return
 		}
 
-		log.Printf("Failed to create application : %v", err)
-		http.Error(w, "Failed to create application", http.StatusInternalServerError)
+		log.Printf("Create application : %v", err)
+		apierror.Internal(w)
 		return
 	}
 
-	// Company field exist in JSON-model but not in application table. Get company name seperately.
+	// TODO: Avoid partial success here.
+	// The application may already be created if this query fails.
+	// Consider using a transaction or combining the queries
 	err = h.db.QueryRowContext(
 		r.Context(),
 		`SELECT name FROM companies WHERE id = $1`,
@@ -335,8 +365,8 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	).Scan(&a.Company)
 
 	if err != nil {
-		log.Printf("failed to retrieve company name: %v", err)
-		http.Error(w, "Application was not created but response could not be built", http.StatusInternalServerError)
+		log.Printf("retrieve company name after creating application: %v", err)
+		apierror.Internal(w)
 		return
 	}
 
