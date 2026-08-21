@@ -47,6 +47,8 @@ func Internal(w http.ResponseWriter) {
 func ContextError(w http.ResponseWriter, err error) bool {
 	switch {
 	case errors.Is(err, context.Canceled):
+		// Client/request already gone
+		// No response needed.
 		return true
 
 	case errors.Is(err, context.DeadlineExceeded):
