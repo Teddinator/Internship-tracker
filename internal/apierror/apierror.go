@@ -1,7 +1,9 @@
 package apierror
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 )
 
@@ -40,4 +42,23 @@ func Internal(w http.ResponseWriter) {
 		"internal_error",
 		"an unexpected error occured",
 	)
+}
+
+func ContextError(w http.ResponseWriter, err error) bool {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return true
+
+	case errors.Is(err, context.DeadlineExceeded):
+		Write(
+			w,
+			http.StatusGatewayTimeout,
+			"query_timeout",
+			"the request timed out",
+		)
+		return true
+
+	default:
+		return false
+	}
 }
