@@ -1,7 +1,6 @@
 package applications
 
 import (
-	"context"
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
@@ -90,27 +89,13 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		switch {
-		case errors.Is(err, context.Canceled):
-			log.Printf("Request canceled while querying applications: %v", err)
-			return
-
-		case errors.Is(err, context.DeadlineExceeded):
-			log.Printf("database query timed out :%v", err)
-			apierror.Write(
-				w,
-				http.StatusGatewayTimeout,
-				"query_timeout",
-				"the request timed out",
-			)
-			return
-
-		default:
-			log.Printf("Failed to query application: %v", err)
-			apierror.Internal(w)
+		if apierror.HandleContextError(w, err) {
+			log.Printf("request context errr while querying applications: %v", err)
 			return
 		}
-
+		log.Printf("Failed to query application: %v", err)
+		apierror.Internal(w)
+		return
 	}
 
 	defer rows.Close()
@@ -420,23 +405,39 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	input.Status = strings.TrimSpace(input.Status)
 
 	if input.CompanyID == "" {
-		http.Error(w, "company_id is required", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"missing_company_id",
+			"company_id is required",
+		)
 		return
 	}
 
 	CompanyID, err := uuid.Parse(input.CompanyID)
 	if err != nil {
-		http.Error(w, "company_id must be a valid UUID", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"invalid_company_id",
+			"company_id must be an UUID",
+		)
 		return
 	}
 
 	if input.Role == "" {
-		http.Error(w, "role is required", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"missing_role",
+			"role is required",
+		)
 		return
 	}
 
 	if !isValidStatus(input.Status) {
-		http.Error(w, "Invalid application status", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"invalid_status",
+			"status must be one of: applied, interview, offer, rejected, withdrawn",
+		)
 		return
 	}
 
@@ -448,7 +449,11 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		if value != "" {
 			parsed, err := time.Parse("2006-01-02", value)
 			if err != nil {
-				http.Error(w, "applied_at must use YYYY-MM-DD format", http.StatusBadRequest)
+				apierror.BadRequest(
+					w,
+					"invalid_applied_at",
+					"applied_at must use format: YYYY-MM-DD",
+				)
 				return
 			}
 
@@ -494,20 +499,32 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, "Application not found", http.StatusNotFound)
+		apierror.NotFound(
+			w,
+			"application_not_found",
+			"application not found",
+		)
 		return
 	}
 
 	if err != nil {
-		var pgErr *pgconn.PgError
-
-		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-			http.Error(w, "Company not found", http.StatusNotFound)
+		if apierror.HandleContextError(w, err) {
+			log.Printf("context error updating application: %d: %v", id, err)
 			return
 		}
 
-		log.Printf("Failed to create application %d, %v", id, err)
-		http.Error(w, "Failed to update application", http.StatusInternalServerError)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			apierror.NotFound(
+				w,
+				"company_not_found",
+				"company not found",
+			)
+			return
+		}
+
+		log.Printf("update application %d, %v", id, err)
+		apierror.Internal(w)
 		return
 	}
 
@@ -518,8 +535,16 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	).Scan(&a.Company)
 
 	if err != nil {
-		log.Printf("Failed to retrieve company name: %v", err)
-		http.Error(w, "Failed to retrieve company", http.StatusInternalServerError)
+		if apierror.HandleContextError(w, err) {
+			log.Printf(
+				"context error retrieving company for application %d: %v",
+				id,
+				err,
+			)
+			return
+		}
+		log.Printf("application %d updated but failed to retrieve company name: %v", id, err)
+		apierror.Internal(w)
 		return
 	}
 
