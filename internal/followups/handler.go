@@ -23,6 +23,7 @@ func NewHandler(db *sql.DB) *handler {
 	}
 }
 
+// TODO: Fixa error handling
 func (h *handler) CreateFollowUp(w http.ResponseWriter, r *http.Request) {
 	idString := chi.URLParam(r, "id")
 

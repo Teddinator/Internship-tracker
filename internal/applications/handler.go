@@ -557,6 +557,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// TODO: Fixa error handling
 func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 	idString := chi.URLParam(r, "id")
 

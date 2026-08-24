@@ -21,6 +21,7 @@ func NewHandler(db *sql.DB) *Handler {
 	return &Handler{db: db}
 }
 
+// TODO: Fixa error handling
 func (h *Handler) CreateNote(w http.ResponseWriter, r *http.Request) {
 	idString := chi.URLParam(r, "id")
 

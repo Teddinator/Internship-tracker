@@ -23,6 +23,7 @@ func NewHandler(db *sql.DB) *Handler {
 	}
 }
 
+// TODO: Fixa error handling
 func (h *Handler) CreateContact(w http.ResponseWriter, r *http.Request) {
 	log.Println("CreateContact handler reached")
 	idString := chi.URLParam(r, "id")
