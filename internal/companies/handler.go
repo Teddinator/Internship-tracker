@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/teddinator/Internship-tracker/internal/apierror"
 )
 
 type Handler struct {
@@ -42,8 +42,13 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 		`,
 	)
 
+	if apierror.HandleContextError(w, err) {
+		return
+	}
+
 	if err != nil {
-		http.Error(w, "Couldn't reterive companies", http.StatusInternalServerError)
+		log.Printf("failed to fetch companies: %v", err)
+		apierror.Internal(w)
 		return
 	}
 	defer rows.Close()
@@ -65,8 +70,12 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 		)
 
 		if err != nil {
-			log.Printf("Failed to convert sql to json: %v", err)
-			http.Error(w, "Couldnt convert database entry to JSON", http.StatusInternalServerError)
+			if apierror.HandleContextError(w, err) {
+				return
+			}
+
+			log.Printf("failed to scan company row: %v", err)
+			apierror.Internal(w)
 			return
 		}
 
@@ -74,14 +83,18 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rows.Err(); err != nil {
-		http.Error(w, "failed to read applications", http.StatusInternalServerError)
+		if apierror.HandleContextError(w, err) {
+			return
+		}
+
+		log.Printf("failed while iterating companies: %v", err)
+		apierror.Internal(w)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(companies); err != nil {
-		log.Printf("Couldn't encode data: %v", err)
-		http.Error(w, "Couldn't encode data", http.StatusInternalServerError)
+		log.Printf("couldn't encode data: %v", err)
 		return
 	}
 }
@@ -90,8 +103,12 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
 	if _, err := uuid.Parse(id); err != nil {
-		log.Printf("Invalid company UUID %q: %v", id, err)
-		http.Error(w, "Invalid company ID", http.StatusInternalServerError)
+		log.Printf("invalid company UUID %q: %v", id, err)
+		apierror.BadRequest(
+			w,
+			"invalid_company_id",
+			"company id must be a valid UUID",
+		)
 		return
 	}
 
@@ -122,56 +139,61 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 		&c.UpdatedAt,
 	)
 
+	if apierror.HandleContextError(w, err) {
+		return
+	}
+
 	if errors.Is(err, sql.ErrNoRows) {
-		log.Printf("No valid entry was found")
-		http.Error(w, "Could not find entry matching ID", http.StatusInternalServerError)
+		log.Printf("company not found: id=%q", id)
+		apierror.NotFound(
+			w,
+			"company_not_found",
+			"company not found",
+		)
 		return
 	}
 
 	if err != nil {
-		log.Printf("Failed to query applications: %v", err)
-		http.Error(w, "Failed to query applications", http.StatusInternalServerError)
+		log.Printf("failed to fetch company %q: %v", id, err)
+		apierror.Internal(w)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 
 	if err := json.NewEncoder(w).Encode(c); err != nil {
-		log.Printf("Couldnt convert data to JSON: %v", err)
-		http.Error(w, "Couldn't convert data to JSON", http.StatusInternalServerError)
+		log.Printf("couldn't convert data to JSON: %v", err)
 	}
 }
 
 func (h *Handler) CreateComp(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Name     string `json:"name"`
-		Website  string `json:"website"`
-		Industry string `json:"industry"`
-		Location string `json:"location"`
-		Notes    string `json:"notes"`
-	}
+	var input companyInput
 
-	err := json.NewDecoder(r.Body).Decode(&input)
-	if err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		log.Printf("Failed to decode company request: %v", err)
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"invalid_json_body",
+			"request body must contain valid JSON body",
+		)
 		return
 	}
 
-	input.Name = strings.TrimSpace(input.Name)
-	input.Website = strings.TrimSpace(input.Website)
-	input.Industry = strings.TrimSpace(input.Industry)
-	input.Location = strings.TrimSpace(input.Location)
-	input.Notes = strings.TrimSpace(input.Notes)
+	input.trim()
 
 	if input.Name == "" {
-		http.Error(w, "Company name is required", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"company_name_required",
+			"name is required",
+		)
 		return
 	}
 
 	var c Company
 
-	err = h.db.QueryRowContext(
+	err := h.db.QueryRowContext(
 		r.Context(),
 		`INSERT INTO companies (
 			name,
@@ -207,9 +229,13 @@ func (h *Handler) CreateComp(w http.ResponseWriter, r *http.Request) {
 		&c.UpdatedAt,
 	)
 
+	if apierror.HandleContextError(w, err) {
+		return
+	}
+
 	if err != nil {
-		log.Printf("Failed to create company: %v", err)
-		http.Error(w, "Failed to create company", http.StatusInternalServerError)
+		log.Printf("failed to create company: %v", err)
+		apierror.Internal(w)
 		return
 	}
 
@@ -222,7 +248,6 @@ func (h *Handler) CreateComp(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewEncoder(w).Encode(c); err != nil {
 		log.Printf("Failed to encode company response: %v", err)
-		http.Error(w, "Failed to encode company respone", http.StatusInternalServerError)
 		return
 	}
 }
@@ -233,33 +258,35 @@ func (h *Handler) UpdateComp(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(idString)
 	if err != nil {
 		log.Printf("Invalid company UUID %q: %v", idString, err)
-		http.Error(w, "Invalid company ID", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"invalid_company_id",
+			"company_id must be a valid UUID",
+		)
 		return
 	}
 
-	var input struct {
-		Name     string `json:"name"`
-		Website  string `json:"website"`
-		Industry string `json:"industry"`
-		Location string `json:"location"`
-		Notes    string `json:"notes"`
-	}
+	var input companyInput
 
 	err = json.NewDecoder(r.Body).Decode(&input)
 	if err != nil {
-		log.Printf("Failed to decode company update: %v", err)
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		log.Printf("failed to decode company update: %v", err)
+		apierror.BadRequest(
+			w,
+			"invalid_json_body",
+			"request body must contain valid JSON body",
+		)
 		return
 	}
 
-	input.Name = strings.TrimSpace(input.Name)
-	input.Website = strings.TrimSpace(input.Website)
-	input.Industry = strings.TrimSpace(input.Industry)
-	input.Location = strings.TrimSpace(input.Location)
-	input.Notes = strings.TrimSpace(input.Notes)
+	input.trim()
 
 	if input.Name == "" {
-		http.Error(w, "Company name is required", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"company_name_required",
+			"name is required",
+		)
 		return
 	}
 
@@ -304,14 +331,22 @@ func (h *Handler) UpdateComp(w http.ResponseWriter, r *http.Request) {
 		&c.UpdatedAt,
 	)
 
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		http.Error(w, "Company not found", http.StatusNotFound)
+	if apierror.HandleContextError(w, err) {
 		return
+	}
 
-	case err != nil:
-		log.Printf("Failed to update company %s: %v", id, err)
-		http.Error(w, "Falied to update company", http.StatusInternalServerError)
+	if errors.Is(err, sql.ErrNoRows) {
+		apierror.NotFound(
+			w,
+			"company_not_found",
+			"company not found",
+		)
+		return
+	}
+
+	if err != nil {
+		log.Printf("failed to update company %s: %v", id, err)
+		apierror.Internal(w)
 		return
 	}
 
@@ -319,7 +354,7 @@ func (h *Handler) UpdateComp(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	if err := json.NewEncoder(w).Encode(c); err != nil {
-		log.Printf("Failed to encode updated company: %v", err)
+		log.Printf("failed to encode updated company: %v", err)
 	}
 }
 
@@ -329,8 +364,12 @@ func (h *Handler) DeleteComp(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(idString)
 
 	if err != nil {
-		log.Printf("Invalid company UUID: %q: %v", idString, err)
-		http.Error(w, "Invalid company ID", http.StatusBadRequest)
+		log.Printf("invalid company UUID: %q: %v", idString, err)
+		apierror.BadRequest(
+			w,
+			"invalid_company_id",
+			"company_id must be a valid UUID",
+		)
 		return
 	}
 
@@ -342,33 +381,42 @@ func (h *Handler) DeleteComp(w http.ResponseWriter, r *http.Request) {
 		id,
 	)
 
+	if apierror.HandleContextError(w, err) {
+		return
+	}
+
 	if err != nil {
 		var pgErr *pgconn.PgError
 
 		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-			http.Error(
+			apierror.Conflict(
 				w,
-				"Company cannot be deleted because it has applications",
-				http.StatusConflict,
+				"company_has_applications",
+				"company cannot be deleted because it has applications",
 			)
 			return
 		}
 
-		log.Printf("Failed to delete company %s: %v", id, err)
-		http.Error(w, "Failed to delete company", http.StatusInternalServerError)
+		log.Printf("failed to delete company %s: %v", id, err)
+		apierror.Internal(w)
 		return
 	}
 
 	rowsAffected, err := result.RowsAffected()
 
 	if err != nil {
-		log.Printf("Failed to read affected rows: %v", err)
-		http.Error(w, "Failed to read affected rows", http.StatusInternalServerError)
+		log.Printf("failed to read affected rows: %v", err)
+		apierror.Internal(w)
 		return
 	}
 
 	if rowsAffected == 0 {
-		http.Error(w, "Company not found", http.StatusNotFound)
+		apierror.NotFound(
+			w,
+			"company_not_found",
+			"company not found",
+		)
+		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)

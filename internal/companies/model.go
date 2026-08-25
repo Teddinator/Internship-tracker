@@ -12,3 +12,11 @@ type Company struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+type companyInput struct {
+	Name     string `json:"name"`
+	Website  string `json:"website"`
+	Industry string `json:"industry"`
+	Location string `json:"location"`
+	Notes    string `json:"notes"`
+}
