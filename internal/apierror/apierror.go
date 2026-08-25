@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 )
 
@@ -35,6 +36,10 @@ func NotFound(w http.ResponseWriter, code, message string) {
 	Write(w, http.StatusNotFound, code, message)
 }
 
+func Conflict(w http.ResponseWriter, code, message string) {
+	Write(w, http.StatusConflict, code, message)
+}
+
 func Internal(w http.ResponseWriter) {
 	Write(
 		w,
@@ -44,11 +49,11 @@ func Internal(w http.ResponseWriter) {
 	)
 }
 
-func ContextError(w http.ResponseWriter, err error) bool {
+func HandleContextError(w http.ResponseWriter, err error) bool {
 	switch {
 	case errors.Is(err, context.Canceled):
 		// Client/request already gone
-		// No response needed.
+		log.Printf("request canceled by client")
 		return true
 
 	case errors.Is(err, context.DeadlineExceeded):
