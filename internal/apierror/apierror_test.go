@@ -20,7 +20,7 @@ func TestErrorResponse(t *testing.T) {
 				BadRequest(w, "bad_request", "bad request")
 			},
 			wantStatus: http.StatusBadRequest,
-			wantCode:   "bad request",
+			wantCode:   "bad_request",
 		},
 		{
 			name: "not found",
@@ -28,7 +28,7 @@ func TestErrorResponse(t *testing.T) {
 				NotFound(w, "not_found", "not found")
 			},
 			wantStatus: http.StatusNotFound,
-			wantCode:   "not found",
+			wantCode:   "not_found",
 		},
 		{
 			name: "conflict",
