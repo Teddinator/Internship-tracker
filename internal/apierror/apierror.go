@@ -45,7 +45,7 @@ func Internal(w http.ResponseWriter) {
 		w,
 		http.StatusInternalServerError,
 		"internal_error",
-		"an unexpected error occured",
+		"an unexpected error occurred",
 	)
 }
 
