@@ -1,7 +1,9 @@
 package apierror
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -68,4 +70,44 @@ func TestErrorResponse(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHandleContextError(t *testing.T) {
+	t.Run("canceled", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+
+		handled := HandleContextError(rr, context.Canceled)
+
+		if !handled {
+			t.Fatal("expected context.Canceled to be handled")
+		}
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("excpeted no response to be written, got %d", rr.Code)
+		}
+	})
+
+	t.Run("deadline exceeded", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+
+		handled := HandleContextError(rr, context.DeadlineExceeded)
+
+		if !handled {
+			t.Fatal("expected deadline to be handled")
+		}
+
+		if rr.Code != http.StatusGatewayTimeout {
+			t.Fatalf("expected 504, got %d", rr.Code)
+		}
+	})
+
+	t.Run("other error", func(t *testing.T) {
+		rr := httptest.NewRecorder()
+
+		handled := HandleContextError(rr, errors.New("database exploded, poof"))
+
+		if handled {
+			t.Fatal("expected unrelated error not to be handled")
+		}
+	})
 }
