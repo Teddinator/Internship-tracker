@@ -1,6 +1,7 @@
 package applications
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
@@ -557,14 +558,17 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// TODO: Fixa error handling
 func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 	idString := chi.URLParam(r, "id")
 
 	id, err := strconv.ParseInt(idString, 10, 64)
 
 	if err != nil {
-		http.Error(w, "Invalid application id", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"invalid_application_id",
+			"application id must be a valid integer",
+		)
 		return
 	}
 
@@ -576,20 +580,30 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 		`, id,
 	)
 
+	if apierror.HandleContextError(w, err) {
+		return
+	}
+
 	if err != nil {
-		http.Error(w, "Failed to delete application", http.StatusInternalServerError)
+		log.Printf("failed to delete application %d: %v", id, err)
+		apierror.Internal(w)
 		return
 	}
 
 	rowsAffected, err := result.RowsAffected()
 
 	if err != nil {
-		http.Error(w, "failed to check deleted application", http.StatusInternalServerError)
+		log.Printf("failed to read affected rows: %v", err)
+		apierror.Internal(w)
 		return
 	}
 
 	if rowsAffected == 0 {
-		http.Error(w, "Application not found", http.StatusNotFound)
+		apierror.NotFound(
+			w,
+			"application_not_found",
+			"application not found",
+		)
 		return
 	}
 
@@ -615,9 +629,14 @@ func (h *Handler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 			ORDER BY a.id	
 		`,
 	)
+
+	if apierror.HandleContextError(w, err) {
+		return
+	}
+
 	if err != nil {
 		log.Printf("Failed to query application for CSV export: %v", err)
-		http.Error(w, "failed to export applications", http.StatusInternalServerError)
+		apierror.Internal(w)
 		return
 	}
 	defer rows.Close()
@@ -637,26 +656,29 @@ func (h *Handler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 			&a.CreatedAt,
 			&a.UpdatedAt,
 		); err != nil {
-			log.Printf("Failed to scan application for CSV export: %v", err)
-			http.Error(w, "Failed to export applications", http.StatusInternalServerError)
+			if apierror.HandleContextError(w, err) {
+				return
+			}
+
+			log.Printf("failed to scan application for CSV export: %v", err)
+			apierror.Internal(w)
 			return
 		}
 		applications = append(applications, a)
 	}
 
 	if err := rows.Err(); err != nil {
+		if apierror.HandleContextError(w, err) {
+			return
+		}
+
 		log.Printf("Failed while reading applications for CSV export: %v", err)
-		http.Error(w, "Failed to export applications", http.StatusInternalServerError)
+		apierror.Internal(w)
 		return
 	}
 
-	w.Header().Set("Content-Type", "json/application")
-	w.Header().Set(
-		"Content-Disposition",
-		`attachment; filename="applications.csv"`,
-	)
-
-	writer := csv.NewWriter(w)
+	var buf bytes.Buffer
+	writer := csv.NewWriter(&buf)
 
 	if err := writer.Write([]string{
 		"id",
@@ -669,6 +691,7 @@ func (h *Handler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 		"updated_at",
 	}); err != nil {
 		log.Printf("Failed to write CSV header: %v", err)
+		apierror.Internal(w)
 		return
 	}
 
@@ -692,6 +715,7 @@ func (h *Handler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 
 		if err := writer.Write(record); err != nil {
 			log.Printf("Failed to write CSV record: %v", err)
+			apierror.Internal(w)
 			return
 		}
 	}
@@ -700,5 +724,17 @@ func (h *Handler) ExportCSV(w http.ResponseWriter, r *http.Request) {
 
 	if err := writer.Error(); err != nil {
 		log.Printf("Failed to complete CSV export: %v", err)
+		apierror.Internal(w)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set(
+		"Content-Disposition",
+		`attachment; filename="applications.csv"`,
+	)
+
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		log.Printf("failed to write CSV response: %v", err)
 	}
 }
