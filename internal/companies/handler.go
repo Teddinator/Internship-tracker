@@ -24,7 +24,6 @@ func NewHandler(db *sql.DB) *Handler {
 	}
 }
 
-// TODO: Fixa error handling
 func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.QueryContext(r.Context(),
 		`

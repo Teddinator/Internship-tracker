@@ -1,5 +1,6 @@
 #Docker
-
+.dockerignore
+me
 #Environment variables
 .env
 .env.local
