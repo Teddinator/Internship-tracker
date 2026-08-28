@@ -13,3 +13,11 @@ type Contact struct {
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
+
+type contactInput struct {
+	Name        string `json:"name"`
+	Email       string `json:"email"`
+	LinkedInURL string `json:"linkedin_url"`
+	Role        string `json:"role"`
+	Notes       string `json:"notes"`
+}
