@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/teddinator/Internship-tracker/internal/apierror"
 )
 
 type Handler struct {
@@ -27,31 +28,41 @@ func (h *Handler) CreateNote(w http.ResponseWriter, r *http.Request) {
 
 	applicationID, err := strconv.ParseInt(idString, 10, 64)
 	if err != nil {
-		http.Error(w, "id must be a valid number", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"invalid_application_id",
+			"application_id must be a valid integer",
+		)
 		return
 	}
 
-	var input struct {
-		Content string `json:"content"`
-	}
+	var input noteInput
 
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 
 	if err = decoder.Decode(&input); err != nil {
-		log.Printf("Failed to decode note: %v", err)
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		log.Printf("failed to decode note: %v", err)
+		apierror.BadRequest(
+			w,
+			"invalid_json_body",
+			"request body must contain valid json",
+		)
 		return
 	}
 
 	input.Content = strings.TrimSpace(input.Content)
 
 	if input.Content == "" {
-		http.Error(w, "Content is required", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"note_content_required",
+			"note content is required",
+		)
 		return
 	}
 
-	var n Note
+	var note Note
 	err = h.db.QueryRowContext(
 		r.Context(),
 		`INSERT INTO notes(
@@ -67,23 +78,31 @@ func (h *Handler) CreateNote(w http.ResponseWriter, r *http.Request) {
 			updated_at
 		`, applicationID, input.Content,
 	).Scan(
-		&n.ID,
-		&n.ApplicationID,
-		&n.Content,
-		&n.CreatedAt,
-		&n.UpdatedAt,
+		&note.ID,
+		&note.ApplicationID,
+		&note.Content,
+		&note.CreatedAt,
+		&note.UpdatedAt,
 	)
+
+	if apierror.HandleContextError(w, err) {
+		return
+	}
 
 	if err != nil {
 		var pgErr *pgconn.PgError
 
 		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-			http.Error(w, "Application not found", http.StatusNotFound)
+			apierror.NotFound(
+				w,
+				"application_not_found",
+				"application not found",
+			)
 			return
 		}
 
-		log.Printf("Failed to create note: %v", err)
-		http.Error(w, "Failed to create note", http.StatusInternalServerError)
+		log.Printf("failed to create note: %v", err)
+		apierror.Internal(w)
 		return
 	}
 
@@ -96,7 +115,7 @@ func (h *Handler) CreateNote(w http.ResponseWriter, r *http.Request) {
 	// )
 	w.WriteHeader(http.StatusCreated)
 
-	if err = json.NewEncoder(w).Encode(n); err != nil {
+	if err = json.NewEncoder(w).Encode(note); err != nil {
 		log.Printf("Failed to encode response: %v", err)
 		return
 	}
@@ -109,53 +128,111 @@ func (h *Handler) GetNotes(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(idString, 10, 64)
 
 	if err != nil {
-		http.Error(w, "ID must be a valid number", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"invalid_application_id",
+			"application_id must be a valid integer",
+		)
+		return
+	}
+
+	var exists bool
+
+	err = h.db.QueryRowContext(
+		r.Context(),
+		`SELECT EXISTS(
+			SELECT 1
+			FROM applications
+			WHERE id = $1	
+		)`,
+		id,
+	).Scan(&exists)
+
+	if apierror.HandleContextError(w, err) {
+		return
+	}
+
+	if err != nil {
+		log.Printf("failed to check applications: %v", err)
+		apierror.Internal(w)
+		return
+	}
+
+	if !exists {
+		apierror.NotFound(
+			w,
+			"application_not_found",
+			"application not found",
+		)
 		return
 	}
 
 	rows, err := h.db.QueryContext(
 		r.Context(),
 		`
-			SELECT * FROM notes
+			SELECT 
+				id,
+				application_id,
+				content,
+				created_at,
+				updated_at
+			FROM notes
 			WHERE application_id = $1
 
 		`, id,
 	)
 
-	if err != nil {
-		http.Error(w, "Couldn't query database", http.StatusInternalServerError)
+	if apierror.HandleContextError(w, err) {
 		return
 	}
+
+	if err != nil {
+		log.Printf("failed to retrieve notes: %v", err)
+		apierror.Internal(w)
+		return
+	}
+
+	defer rows.Close()
 
 	notes := make([]Note, 0)
 
 	for rows.Next() {
-		var n Note
+		var note Note
 
 		err = rows.Scan(
-			&n.ID,
-			&n.ApplicationID,
-			&n.Content,
-			&n.CreatedAt,
-			&n.UpdatedAt,
+			&note.ID,
+			&note.ApplicationID,
+			&note.Content,
+			&note.CreatedAt,
+			&note.UpdatedAt,
 		)
 
 		if err != nil {
-			http.Error(w, "Couldn't convert database entry to JSON", http.StatusInternalServerError)
+			if apierror.HandleContextError(w, err) {
+				return
+			}
+
+			log.Printf("failed to scan notes: %v", err)
+			apierror.Internal(w)
 			return
 		}
 
-		notes = append(notes, n)
+		notes = append(notes, note)
 	}
 
 	if err := rows.Err(); err != nil {
-		http.Error(w, "Failed to read notes", http.StatusInternalServerError)
+		if apierror.HandleContextError(w, err) {
+			return
+		}
+
+		log.Printf("failed while reading notes: %v", err)
+		apierror.Internal(w)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(notes); err != nil {
-		http.Error(w, "Failed to encode data", http.StatusInternalServerError)
+		log.Printf("failed to encode notes: %v", err)
 		return
 	}
 }

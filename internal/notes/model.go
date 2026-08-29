@@ -9,3 +9,7 @@ type Note struct {
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
+
+type noteInput struct {
+	Content string `json:"content"`
+}
