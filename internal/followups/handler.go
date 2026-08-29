@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/teddinator/Internship-tracker/internal/apierror"
 )
 
 type handler struct {
@@ -29,20 +30,35 @@ func (h *handler) CreateFollowUp(w http.ResponseWriter, r *http.Request) {
 
 	applicationID, err := strconv.ParseInt(idString, 10, 64)
 	if err != nil {
-		http.Error(w, "ID must be a valid integer", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"invalid_application_id",
+			"application id must be a valid integer",
+		)
 		return
 	}
 
 	var req CreateFollowUpRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&req); err != nil {
+		apierror.BadRequest(
+			w,
+			"invalid_json_body",
+			"request body must contain valid json",
+		)
 		return
 	}
 
 	dueDate, err := time.Parse("2006-01-02", req.DueDate)
 	if err != nil {
-		http.Error(w, "due_date must use YYY-MM-DD format", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"invalid_due_date",
+			"due_date must use format YYYY-MM-DD",
+		)
 		return
 	}
 
@@ -79,15 +95,24 @@ func (h *handler) CreateFollowUp(w http.ResponseWriter, r *http.Request) {
 		&followUp.UpdatedAt,
 	)
 
+	if apierror.HandleContextError(w, err) {
+		return
+	}
+
 	if err != nil {
 		var pgErr *pgconn.PgError
 
 		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-			http.Error(w, "Application not found", http.StatusNotFound)
+			apierror.NotFound(
+				w,
+				"application_not_found",
+				"application not found",
+			)
 			return
 		}
 
-		http.Error(w, "could not create follow-up", http.StatusInternalServerError)
+		log.Printf("failed to create followup: %v", err)
+		apierror.Internal(w)
 		return
 	}
 
@@ -97,7 +122,7 @@ func (h *handler) CreateFollowUp(w http.ResponseWriter, r *http.Request) {
 	response := toFollowUpResponse(followUp)
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Failed to encode data to JSON", http.StatusInternalServerError)
+		log.Printf("failed to encode json: %v", err)
 		return
 	}
 }
@@ -122,8 +147,13 @@ func (h *handler) GetDueFollowUps(w http.ResponseWriter, r *http.Request) {
 		query,
 	)
 
+	if apierror.HandleContextError(w, err) {
+		return
+	}
+
 	if err != nil {
-		http.Error(w, "Unable to query follow-ups", http.StatusInternalServerError)
+		log.Printf("failed to query followups: %v", err)
+		apierror.Internal(w)
 		return
 	}
 	defer rows.Close()
@@ -144,7 +174,12 @@ func (h *handler) GetDueFollowUps(w http.ResponseWriter, r *http.Request) {
 		)
 
 		if err != nil {
-			http.Error(w, "Failed to scan followups", http.StatusInternalServerError)
+			if apierror.HandleContextError(w, err) {
+				return
+			}
+
+			log.Printf("failed to scan followups: %v", err)
+			apierror.Internal(w)
 			return
 		}
 
@@ -153,7 +188,12 @@ func (h *handler) GetDueFollowUps(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rows.Err(); err != nil {
-		http.Error(w, "Failed while reading follow-ups", http.StatusInternalServerError)
+		if apierror.HandleContextError(w, err) {
+			return
+		}
+
+		log.Printf("failed while reading followups: %v", err)
+		apierror.Internal(w)
 		return
 	}
 
@@ -171,7 +211,11 @@ func (h *handler) CompleteFollowUp(w http.ResponseWriter, r *http.Request) {
 
 	id, err := strconv.ParseInt(idString, 10, 64)
 	if err != nil {
-		http.Error(w, "id must be a valid integer", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"invalid_followup_id",
+			"followup_id must be a valid integer",
+		)
 		return
 	}
 
@@ -208,23 +252,32 @@ func (h *handler) CompleteFollowUp(w http.ResponseWriter, r *http.Request) {
 		&followUp.UpdatedAt,
 	)
 
+	if apierror.HandleContextError(w, err) {
+		return
+	}
+
 	if errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, "follow-up not found", http.StatusNotFound)
+		apierror.NotFound(
+			w,
+			"followup_not_found",
+			"followup not found",
+		)
 		return
 	}
 
 	if err != nil {
-		http.Error(w, "failed to complete follow-up", http.StatusInternalServerError)
+		log.Printf("failed to complete followup: %v", err)
+		apierror.Internal(w)
 		return
 	}
 
-	w.Header().Set("Content-Type", "json/application")
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
 	response := toFollowUpResponse(followUp)
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("Failed top encode to JSON : %v", err)
+		log.Printf("failed to encode to json: %v", err)
 		return
 	}
 }
@@ -234,7 +287,11 @@ func (h *handler) DeleteFollowUp(w http.ResponseWriter, r *http.Request) {
 
 	id, err := strconv.ParseInt(idString, 10, 64)
 	if err != nil {
-		http.Error(w, "id must be a valid integer", http.StatusBadRequest)
+		apierror.BadRequest(
+			w,
+			"invalid_followup_id",
+			"followup_id must be a valid integer",
+		)
 		return
 	}
 
@@ -250,8 +307,8 @@ func (h *handler) DeleteFollowUp(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		log.Printf("Failed to delete follow-up: %v", err)
-		http.Error(w, "Failed to delete follow-up", http.StatusInternalServerError)
+		log.Printf("failed to delete follow-up: %v", err)
+		apierror.Internal(w)
 		return
 	}
 
@@ -259,12 +316,16 @@ func (h *handler) DeleteFollowUp(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		log.Printf("failed to check affected rows: %v", err)
-		http.Error(w, "Failed to delete follow-up", http.StatusInternalServerError)
+		apierror.Internal(w)
 		return
 	}
 
 	if rowsAffected == 0 {
-		http.Error(w, "follow-up not found", http.StatusNotFound)
+		apierror.NotFound(
+			w,
+			"followup_not_found",
+			"followup not found",
+		)
 		return
 	}
 
