@@ -33,3 +33,20 @@
 - Errors:
     - 400 invalid id
     - 404 application not found
+
+## PUT /applications/{id}
+
+- Method: PUT
+- Safe: No
+- Idempotent: Yes
+- Success: 200 OK
+- Errors:
+    - 400 invalid input
+    - 404 application not found
+
+## GET /applications/export.csv
+
+- Method: GET
+- Safe: Yes
+- Idempotent: Yes
+- Success: 200 OK
