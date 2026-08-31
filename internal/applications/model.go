@@ -12,3 +12,10 @@ type Application struct {
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
 }
+
+type applicationInput struct {
+	CompanyID string  `json:"company_id"`
+	Role      string  `json:"role"`
+	Status    string  `json:"status"`
+	AppliedAt *string `json:"applied_at"`
+}

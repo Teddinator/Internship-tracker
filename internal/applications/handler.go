@@ -382,12 +382,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var input struct {
-		CompanyID string  `json:"company_id"`
-		Role      string  `json:"role"`
-		Status    string  `json:"status"`
-		AppliedAt *string `json:"applied_at"`
-	}
+	var input applicationInput
 
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -462,7 +457,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var a Application
+	var app Application
 
 	err = h.db.QueryRowContext(
 		r.Context(),
@@ -490,13 +485,13 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		appliedAt,
 		id,
 	).Scan(
-		&a.ID,
-		&a.CompanyID,
-		&a.Role,
-		&a.Status,
-		&a.AppliedAt,
-		&a.UpdatedAt,
-		&a.CreatedAt,
+		&app.ID,
+		&app.CompanyID,
+		&app.Role,
+		&app.Status,
+		&app.AppliedAt,
+		&app.UpdatedAt,
+		&app.CreatedAt,
 	)
 
 	if errors.Is(err, sql.ErrNoRows) {
@@ -533,7 +528,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 		`SELECT name FROM companies WHERE id = $1`,
 		CompanyID,
-	).Scan(&a.Company)
+	).Scan(&app.Company)
 
 	if err != nil {
 		if apierror.HandleContextError(w, err) {
@@ -552,7 +547,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	if err := json.NewEncoder(w).Encode(a); err != nil {
+	if err := json.NewEncoder(w).Encode(app); err != nil {
 		log.Printf("Failed to encode application: %v", err)
 		return
 	}
