@@ -204,12 +204,7 @@ func (h *Handler) GetAppByID(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 
-	var input struct {
-		CompanyID string  `json:"company_id"`
-		Role      string  `json:"role"`
-		Status    string  `json:"status"`
-		AppliedAt *string `json:"applied_at"`
-	}
+	var input applicationInput
 
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
