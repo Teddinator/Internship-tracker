@@ -130,8 +130,15 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	responses := make([]applicationResponse, 0, len(applications))
+
+	for _, a := range applications {
+		responses = append(responses, formattedApplicationResponse(a))
+	}
+
 	w.Header().Set("Content-type", "application/json")
-	if err := json.NewEncoder(w).Encode(applications); err != nil {
+
+	if err := json.NewEncoder(w).Encode(responses); err != nil {
 		log.Printf("encode applications response: %v", err)
 	}
 }
@@ -197,7 +204,9 @@ func (h *Handler) GetAppByID(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	if err := json.NewEncoder(w).Encode(a); err != nil {
+	response := formattedApplicationResponse(a)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("failed to encode application :%v", err)
 	}
 }
@@ -284,7 +293,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var a Application
+	var app Application
 
 	err = h.db.QueryRowContext(r.Context(),
 		`
@@ -309,13 +318,13 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 		input.Status,
 		appliedAt,
 	).Scan(
-		&a.ID,
-		&a.CompanyID,
-		&a.Role,
-		&a.Status,
-		&a.AppliedAt,
-		&a.CreatedAt,
-		&a.UpdatedAt,
+		&app.ID,
+		&app.CompanyID,
+		&app.Role,
+		&app.Status,
+		&app.AppliedAt,
+		&app.CreatedAt,
+		&app.UpdatedAt,
 	)
 
 	if err != nil {
@@ -343,7 +352,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 		`SELECT name FROM companies WHERE id = $1`,
 		companyID,
-	).Scan(&a.Company)
+	).Scan(&app.Company)
 
 	if err != nil {
 		log.Printf("retrieve company name after creating application: %v", err)
@@ -354,11 +363,13 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set(
 		"Location",
-		fmt.Sprintf("/applications/%d", a.ID),
+		fmt.Sprintf("/applications/%d", app.ID),
 	)
 	w.WriteHeader(http.StatusCreated)
 
-	if err := json.NewEncoder(w).Encode(a); err != nil {
+	response := formattedApplicationResponse(app)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("failed to encode application response: %v", err)
 	}
 }
@@ -542,7 +553,9 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	if err := json.NewEncoder(w).Encode(app); err != nil {
+	response := formattedApplicationResponse(app)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("Failed to encode application: %v", err)
 		return
 	}
