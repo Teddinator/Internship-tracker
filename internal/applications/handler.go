@@ -33,6 +33,7 @@ func NewHandler(db *sql.DB) *Handler {
 func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
 	companyID := strings.TrimSpace(r.URL.Query().Get("company_id"))
+	location := strings.TrimSpace(r.URL.Query().Get("location"))
 
 	query := `
 		SELECT
@@ -56,8 +57,8 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 		if !isValidStatus(status) {
 			apierror.BadRequest(
 				w,
-				"invalid_application_id",
-				"application id must be a valid integer",
+				"invalid_status",
+				"status must be one of: applied, interview, offer, rejected, withdrawn",
 			)
 			return
 		}
@@ -78,7 +79,12 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 		}
 
 		args = append(args, parsedCompanyID)
-		query += fmt.Sprintf("AND a.company_id = $%d", len(args))
+		query += fmt.Sprintf(" AND a.company_id = $%d", len(args))
+	}
+
+	if location != "" {
+		args = append(args, location)
+		query += fmt.Sprintf(" AND c.location ILIKE $%d", len(args))
 	}
 
 	query += " ORDER BY a.id"
