@@ -567,6 +567,118 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
+	idString := chi.URLParam(r, "id")
+
+	id, err := strconv.ParseInt(idString, 10, 64)
+
+	if err != nil {
+		apierror.BadRequest(
+			w,
+			"invalid_application_id",
+			"application id must be a valid integer",
+		)
+		return
+	}
+
+	var input struct {
+		Status string `json:"status"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&input); err != nil {
+		apierror.BadRequest(
+			w,
+			"invalid_json_body",
+			"request body contains invalid json",
+		)
+		return
+	}
+
+	input.Status = strings.TrimSpace(input.Status)
+
+	if !isValidStatus(input.Status) {
+		apierror.BadRequest(
+			w,
+			"invalid_status",
+			"status must be one of: applied, interview, offer, rejected, withdrawn",
+		)
+	}
+
+	var app Application
+
+	err = h.db.QueryRowContext(
+		r.Context(),
+		`
+			UPDATE applications
+			SET
+				status = $1,
+				updated_at = NOW()
+			WHERE id = $2
+			RETURNING
+				id,
+				company_id,
+				role,
+				status,
+				applied_at,
+				created_at,
+				updated_at
+		`,
+		input.Status,
+		id,
+	).Scan(
+		&app.ID,
+		&app.CompanyID,
+		&app.Role,
+		&app.Status,
+		&app.AppliedAt,
+		&app.CreatedAt,
+		&app.UpdatedAt,
+	)
+
+	if apierror.HandleContextError(w, err) {
+		return
+	}
+
+	if errors.Is(err, sql.ErrNoRows) {
+		apierror.NotFound(
+			w,
+			"application_not_found",
+			"application not found",
+		)
+		return
+	}
+
+	if err != nil {
+		log.Printf("failed to update application status %d: %v", id, err)
+		apierror.Internal(w)
+		return
+	}
+
+	err = h.db.QueryRowContext(
+		r.Context(),
+		`SELECT name FROM companies WHERE id = $1`,
+		app.CompanyID,
+	).Scan(&app.Company)
+
+	if err != nil {
+		log.Printf("failed to retreive company after status update: %v", err)
+		apierror.Internal(w)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	response := formattedApplicationResponse(app)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("failed to encode application to json: %v", err)
+	}
+}
+
 func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 	idString := chi.URLParam(r, "id")
 
