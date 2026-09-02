@@ -34,6 +34,7 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
 	companyID := strings.TrimSpace(r.URL.Query().Get("company_id"))
 	location := strings.TrimSpace(r.URL.Query().Get("location"))
+	industry := strings.TrimSpace(r.URL.Query().Get("industry"))
 
 	query := `
 		SELECT
@@ -83,8 +84,13 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if location != "" {
-		args = append(args, location)
+		args = append(args, "%"+location+"%")
 		query += fmt.Sprintf(" AND c.location ILIKE $%d", len(args))
+	}
+
+	if industry != "" {
+		args = append(args, "%"+industry+"%")
+		query += fmt.Sprintf(" AND c.Industry ILIKE $%d", len(args))
 	}
 
 	query += " ORDER BY a.id"
