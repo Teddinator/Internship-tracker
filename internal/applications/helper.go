@@ -24,6 +24,7 @@ func formattedApplicationResponse(a Application) applicationResponse {
 	return applicationResponse{
 		ID:        a.ID,
 		CompanyID: a.CompanyID,
+		Company:   a.Company,
 		Role:      a.Role,
 		Status:    a.Status,
 		AppliedAt: appliedAt,

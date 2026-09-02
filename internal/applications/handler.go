@@ -668,15 +668,6 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 		apierror.Internal(w)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	response := formattedApplicationResponse(app)
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("failed to encode application to json: %v", err)
-	}
 }
 
 func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
