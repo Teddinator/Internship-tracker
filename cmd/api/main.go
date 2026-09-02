@@ -58,6 +58,7 @@ func main() {
 
 		r.Get("/{id}", applicationHandler.GetAppByID)
 		r.Put("/{id}", applicationHandler.UpdateApp)
+		r.Patch("/{id}/status", applicationHandler.UpdateStatus)
 		r.Delete("/{id}", applicationHandler.DeleteApp)
 
 		r.Get("/{id}/notes", notesHandler.GetNotes)
