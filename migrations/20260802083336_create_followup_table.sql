@@ -20,5 +20,4 @@ ON followups (due_date)
 WHERE completed_at is NULL;
 
 -- +goose Down
-
-SELECT 'down SQL query';
+DROP TABLE IF EXISTS followups
