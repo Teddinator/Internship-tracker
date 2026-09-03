@@ -224,6 +224,9 @@ func (h *Handler) GetAppByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
+	idempotencyKey := strings.TrimSpace(
+		r.Header.Get("Idempotency-Key"),
+	)
 
 	var input applicationInput
 
@@ -231,7 +234,6 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(&input); err != nil {
-		log.Printf("Decode application request :%v", err)
 		apierror.BadRequest(
 			w,
 			"invalid_json",
@@ -305,9 +307,94 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if idempotencyKey != "" {
+		var existingApplicationID int64
+
+		err := h.db.QueryRowContext(
+			r.Context(),
+			`
+				SELECT application_id
+				FROM idempotency_keys
+				WHERE key = $1
+			`,
+			idempotencyKey,
+		).Scan(&existingApplicationID)
+
+		if err == nil {
+			var existingApp Application
+
+			err = h.db.QueryRowContext(
+				r.Context(),
+				`
+					SELECT
+						a.id,
+						a.company_id,
+						c.name,
+						a.role,
+						a.status,
+						a.applied_at,
+						a.created_at,
+						a.updated_at
+					FROM applications AS a
+					JOIN companies AS c
+						ON c.id = a.company_id
+					WHERE a.id = $1
+				`,
+				existingApplicationID,
+			).Scan(
+				&existingApp.ID,
+				&existingApp.CompanyID,
+				&existingApp.Company,
+				&existingApp.Role,
+				&existingApp.Status,
+				&existingApp.AppliedAt,
+				&existingApp.CreatedAt,
+				&existingApp.UpdatedAt,
+			)
+
+			if err != nil {
+				log.Printf("retrieve application for idempotency key: %v", err)
+				apierror.Internal(w)
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set(
+				"Location",
+				fmt.Sprintf("/applications/%d", existingApp.ID),
+			)
+			w.WriteHeader(http.StatusCreated)
+
+			response := formattedApplicationResponse(existingApp)
+
+			if err := json.NewEncoder(w).Encode(response); err != nil {
+				log.Printf("encode idempotent application response: %v", err)
+			}
+
+			return
+		}
+
+		if !errors.Is(err, sql.ErrNoRows) {
+			log.Printf("check idempotency key: %v", err)
+			apierror.Internal(w)
+			return
+		}
+
+	}
+
+	tx, err := h.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		log.Printf("begin transaction: %v", err)
+		apierror.Internal(w)
+		return
+	}
+
+	defer tx.Rollback()
+
 	var app Application
 
-	err = h.db.QueryRowContext(r.Context(),
+	err = tx.QueryRowContext(
+		r.Context(),
 		`
 			INSERT INTO applications (
 				company_id,
@@ -347,7 +434,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 			apierror.NotFound(
 				w,
 				"company_not_found",
-				"company_not_found",
+				"company not found",
 			)
 			return
 		}
@@ -357,17 +444,45 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Avoid partial success here.
-	// The application may already be created if this query fails.
-	// Consider using a transaction or combining the queries
-	err = h.db.QueryRowContext(
+	if idempotencyKey != "" {
+		_, err = tx.ExecContext(
+			r.Context(),
+			`
+				INSERT INTO idempotency_keys (
+					key,
+					application_id
+				)
+				VALUES ($1, $2)
+			`,
+			idempotencyKey,
+			app.ID,
+		)
+
+		if err != nil {
+			log.Printf("store idempotency key: %v", err)
+			apierror.Internal(w)
+			return
+		}
+	}
+
+	err = tx.QueryRowContext(
 		r.Context(),
-		`SELECT name FROM companies WHERE id = $1`,
+		`
+			SELECT name
+			FROM companies
+			WHERE id = $1
+		`,
 		companyID,
 	).Scan(&app.Company)
 
 	if err != nil {
 		log.Printf("retrieve company name after creating application: %v", err)
+		apierror.Internal(w)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("commit create application transaction: %v", err)
 		apierror.Internal(w)
 		return
 	}
