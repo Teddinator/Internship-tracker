@@ -2,8 +2,10 @@ package applications
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/csv"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -223,6 +225,7 @@ func (h *Handler) GetAppByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// TODO: Fix context error handling
 func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	idempotencyKey := strings.TrimSpace(
 		r.Header.Get("Idempotency-Key"),
@@ -307,20 +310,53 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	hashInput := applicationIdempotencyInput{
+		CompanyID: input.CompanyID,
+		Role:      input.Role,
+		Status:    input.Status,
+		AppliedAt: input.AppliedAt,
+	}
+
+	hashBytes, err := json.Marshal(hashInput)
+	if err != nil {
+		log.Printf("marshal idempotency request hash input: %v", err)
+		apierror.Internal(w)
+		return
+	}
+
+	sum := sha256.Sum256(hashBytes)
+	requestHash := hex.EncodeToString(sum[:])
+
 	if idempotencyKey != "" {
 		var existingApplicationID int64
+		var existingRequestHash string
 
 		err := h.db.QueryRowContext(
 			r.Context(),
 			`
-				SELECT application_id
+				SELECT 
+					application_id,
+					request_hash
 				FROM idempotency_keys
 				WHERE key = $1
 			`,
 			idempotencyKey,
-		).Scan(&existingApplicationID)
+		).Scan(
+			&existingApplicationID,
+			&existingRequestHash,
+		)
 
 		if err == nil {
+			if existingRequestHash != requestHash {
+				apierror.Write(
+					w,
+					http.StatusUnprocessableEntity,
+					"idempotency_key_reused",
+					"idempotency key has already been used with a different request",
+				)
+				return
+			}
+
 			var existingApp Application
 
 			err = h.db.QueryRowContext(
@@ -352,6 +388,10 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 				&existingApp.UpdatedAt,
 			)
 
+			if apierror.HandleContextError(w, err) {
+				return
+			}
+
 			if err != nil {
 				log.Printf("retrieve application for idempotency key: %v", err)
 				apierror.Internal(w)
@@ -374,6 +414,10 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if apierror.HandleContextError(w, err) {
+			return
+		}
+
 		if !errors.Is(err, sql.ErrNoRows) {
 			log.Printf("check idempotency key: %v", err)
 			apierror.Internal(w)
@@ -383,6 +427,11 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tx, err := h.db.BeginTx(r.Context(), nil)
+
+	if apierror.HandleContextError(w, err) {
+		return
+	}
+
 	if err != nil {
 		log.Printf("begin transaction: %v", err)
 		apierror.Internal(w)
@@ -426,6 +475,10 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 		&app.UpdatedAt,
 	)
 
+	if apierror.HandleContextError(w, err) {
+		return
+	}
+
 	if err != nil {
 		var pgErr *pgconn.PgError
 
@@ -450,13 +503,19 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 			`
 				INSERT INTO idempotency_keys (
 					key,
-					application_id
+					application_id,
+					request_hash
 				)
-				VALUES ($1, $2)
+				VALUES ($1, $2, $3)
 			`,
 			idempotencyKey,
 			app.ID,
+			requestHash,
 		)
+
+		if apierror.HandleContextError(w, err) {
+			return
+		}
 
 		if err != nil {
 			log.Printf("store idempotency key: %v", err)
@@ -475,13 +534,23 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 		companyID,
 	).Scan(&app.Company)
 
+	if apierror.HandleContextError(w, err) {
+		return
+	}
+
 	if err != nil {
 		log.Printf("retrieve company name after creating application: %v", err)
 		apierror.Internal(w)
 		return
 	}
 
-	if err := tx.Commit(); err != nil {
+	err = tx.Commit()
+
+	if apierror.HandleContextError(w, err) {
+		return
+	}
+
+	if err != nil {
 		log.Printf("commit create application transaction: %v", err)
 		apierror.Internal(w)
 		return
