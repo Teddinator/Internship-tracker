@@ -307,31 +307,35 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 			}
 
 			appliedAt = &parsed
+			input.AppliedAt = &value
+		} else {
+			input.AppliedAt = nil
 		}
 	}
 
-	hashInput := applicationIdempotencyInput{
-		CompanyID: input.CompanyID,
-		Role:      input.Role,
-		Status:    input.Status,
-		AppliedAt: input.AppliedAt,
-	}
-
-	hashBytes, err := json.Marshal(hashInput)
-	if err != nil {
-		log.Printf("marshal idempotency request hash input: %v", err)
-		apierror.Internal(w)
-		return
-	}
-
-	sum := sha256.Sum256(hashBytes)
-	requestHash := hex.EncodeToString(sum[:])
+	var requestHash string
 
 	if idempotencyKey != "" {
+		hashInput := applicationIdempotencyInput{
+			CompanyID: input.CompanyID,
+			Role:      input.Role,
+			Status:    input.Status,
+			AppliedAt: input.AppliedAt,
+		}
+
+		hashBytes, err := json.Marshal(hashInput)
+		if err != nil {
+			log.Printf("marshal idempotency request hash input: %v", err)
+			apierror.Internal(w)
+			return
+		}
+
+		sum := sha256.Sum256(hashBytes)
+		requestHash = hex.EncodeToString(sum[:])
 		var existingApplicationID int64
 		var existingRequestHash string
 
-		err := h.db.QueryRowContext(
+		err = h.db.QueryRowContext(
 			r.Context(),
 			`
 				SELECT 
@@ -518,6 +522,110 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err != nil {
+			var pgErr *pgconn.PgError
+
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+				if rollbackErr := tx.Rollback(); rollbackErr != nil &&
+					!errors.Is(rollbackErr, sql.ErrTxDone) {
+					log.Printf("rollback after idempotency conflict: %v",
+						rollbackErr,
+					)
+				}
+
+				var existingApplicationID int64
+				var existingRequestHash string
+
+				err = h.db.QueryRowContext(
+					r.Context(),
+					`
+						SELECT
+							application_id,
+							request_hash
+						FROM idempotency_keys
+						WHERE key = $1
+					`,
+					idempotencyKey,
+				).Scan(
+					&existingApplicationID,
+					&existingRequestHash,
+				)
+
+				if apierror.HandleContextError(w, err) {
+					return
+				}
+
+				if err != nil {
+					log.Printf("retrieve idempotency key after conflict: %v", err)
+					apierror.Internal(w)
+					return
+				}
+
+				if existingRequestHash != requestHash {
+					apierror.Write(
+						w,
+						http.StatusUnprocessableEntity,
+						"idempotency_key_reused",
+						"idempotency key has already been used with a different request",
+					)
+					return
+				}
+
+				var existingApp Application
+
+				err = h.db.QueryRowContext(
+					r.Context(),
+					`
+						SELECT
+							a.id,
+							a.company_id,
+							c.name,
+							a.role,
+							a.status,
+							a.applied_at,
+							a.created_at,
+							a.updated_at
+						FROM applications AS a
+						JOIN companies AS c
+							ON c.id = a.company_id
+						WHERE a.id = $1
+					`, existingApplicationID,
+				).Scan(
+					&existingApp.ID,
+					&existingApp.CompanyID,
+					&existingApp.Company,
+					&existingApp.Role,
+					&existingApp.Status,
+					&existingApp.AppliedAt,
+					&existingApp.CreatedAt,
+					&existingApp.UpdatedAt,
+				)
+
+				if apierror.HandleContextError(w, err) {
+					return
+				}
+
+				if err != nil {
+					log.Printf("retrieve application after idempotency conflict: %v", err)
+					apierror.Internal(w)
+					return
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set(
+					"Location",
+					fmt.Sprintf("/applications/%d", existingApp.ID),
+				)
+				w.WriteHeader(http.StatusCreated)
+
+				response := formattedApplicationResponse(existingApp)
+
+				if err := json.NewEncoder(w).Encode(response); err != nil {
+					log.Printf("encode concurrent idempotent response: %v", err)
+				}
+
+				return
+			}
+
 			log.Printf("store idempotency key: %v", err)
 			apierror.Internal(w)
 			return
