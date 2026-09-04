@@ -5,3 +5,6 @@
 
 # Git
 .gitignore
+
+# Docs
+cheatsheet.md

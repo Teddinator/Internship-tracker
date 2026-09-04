@@ -1,8 +1,10 @@
-#Docker
+# Docker
 .dockerignore
 me
-#Environment variables
+# Environment variables
 .env
 .env.local
-#Temp files
+# Temp files
 tmp/
+# Docs
+cheatsheet.md
