@@ -2,6 +2,7 @@ package applications
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/csv"
@@ -22,6 +23,8 @@ import (
 	"github.com/teddinator/Internship-tracker/internal/apierror"
 )
 
+const dbTimeout = 3 * time.Second
+
 type Handler struct {
 	db *sql.DB
 }
@@ -33,6 +36,9 @@ func NewHandler(db *sql.DB) *Handler {
 }
 
 func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), dbTimeout)
+	defer cancel()
+
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
 	companyID := strings.TrimSpace(r.URL.Query().Get("company_id"))
 	location := strings.TrimSpace(r.URL.Query().Get("location"))
@@ -98,7 +104,7 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 	query += " ORDER BY a.id"
 
 	rows, err := h.db.QueryContext(
-		r.Context(),
+		ctx,
 		query,
 		args...,
 	)
@@ -158,6 +164,8 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetAppByID(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), dbTimeout)
+	defer cancel()
 
 	idString := chi.URLParam(r, "id")
 
@@ -174,7 +182,7 @@ func (h *Handler) GetAppByID(w http.ResponseWriter, r *http.Request) {
 	var a Application
 
 	err = h.db.QueryRowContext(
-		r.Context(),
+		ctx,
 		`
 			SELECT 
 				a.id,
@@ -227,6 +235,9 @@ func (h *Handler) GetAppByID(w http.ResponseWriter, r *http.Request) {
 
 // TODO: Fix context error handling
 func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), dbTimeout)
+	defer cancel()
+
 	idempotencyKey := strings.TrimSpace(
 		r.Header.Get("Idempotency-Key"),
 	)
@@ -336,7 +347,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 		var existingRequestHash string
 
 		err = h.db.QueryRowContext(
-			r.Context(),
+			ctx,
 			`
 				SELECT 
 					application_id,
@@ -364,7 +375,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 			var existingApp Application
 
 			err = h.db.QueryRowContext(
-				r.Context(),
+				ctx,
 				`
 					SELECT
 						a.id,
@@ -430,7 +441,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 
 	}
 
-	tx, err := h.db.BeginTx(r.Context(), nil)
+	tx, err := h.db.BeginTx(ctx, nil)
 
 	if apierror.HandleContextError(w, err) {
 		return
@@ -447,7 +458,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	var app Application
 
 	err = tx.QueryRowContext(
-		r.Context(),
+		ctx,
 		`
 			INSERT INTO applications (
 				company_id,
@@ -503,7 +514,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 
 	if idempotencyKey != "" {
 		_, err = tx.ExecContext(
-			r.Context(),
+			ctx,
 			`
 				INSERT INTO idempotency_keys (
 					key,
@@ -536,7 +547,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 				var existingRequestHash string
 
 				err = h.db.QueryRowContext(
-					r.Context(),
+					ctx,
 					`
 						SELECT
 							application_id,
@@ -573,7 +584,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 				var existingApp Application
 
 				err = h.db.QueryRowContext(
-					r.Context(),
+					ctx,
 					`
 						SELECT
 							a.id,
@@ -633,7 +644,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = tx.QueryRowContext(
-		r.Context(),
+		ctx,
 		`
 			SELECT name
 			FROM companies
@@ -679,6 +690,9 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), dbTimeout)
+	defer cancel()
+
 	idString := chi.URLParam(r, "id")
 
 	id, err := strconv.ParseInt(idString, 10, 64)
@@ -770,7 +784,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	var app Application
 
 	err = h.db.QueryRowContext(
-		r.Context(),
+		ctx,
 		`
 			UPDATE applications
 			SET
@@ -835,7 +849,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = h.db.QueryRowContext(
-		r.Context(),
+		ctx,
 		`SELECT name FROM companies WHERE id = $1`,
 		CompanyID,
 	).Scan(&app.Company)
@@ -849,6 +863,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 			)
 			return
 		}
+
 		log.Printf("application %d updated but failed to retrieve company name: %v", id, err)
 		apierror.Internal(w)
 		return
@@ -866,6 +881,9 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+
 	idString := chi.URLParam(r, "id")
 
 	id, err := strconv.ParseInt(idString, 10, 64)
@@ -908,7 +926,7 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	var app Application
 
 	err = h.db.QueryRowContext(
-		r.Context(),
+		ctx,
 		`
 			UPDATE applications
 			SET
@@ -956,7 +974,7 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = h.db.QueryRowContext(
-		r.Context(),
+		ctx,
 		`SELECT name FROM companies WHERE id = $1`,
 		app.CompanyID,
 	).Scan(&app.Company)
@@ -969,6 +987,9 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), dbTimeout)
+	defer cancel()
+
 	idString := chi.URLParam(r, "id")
 
 	id, err := strconv.ParseInt(idString, 10, 64)
@@ -983,7 +1004,7 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := h.db.ExecContext(
-		r.Context(),
+		ctx,
 		`	
 			DELETE FROM applications
 			WHERE id = $1
@@ -1021,8 +1042,11 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ExportCSV(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), dbTimeout)
+	defer cancel()
+
 	rows, err := h.db.QueryContext(
-		r.Context(),
+		ctx,
 		`
 			SELECT
 				a.id,
