@@ -34,7 +34,7 @@ func TestCreateApplication(t *testing.T) {
 			body: `{
 					"company_id":"",
 					"role":"Software Developer Intern",
-					"status":"applied",
+					"status":"applied"
 					}`,
 			wantStatus: http.StatusBadRequest,
 		},
