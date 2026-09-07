@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -32,7 +36,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
+	defer func() {
+		log.Println("closing database connection")
+
+		if err := db.Close(); err != nil {
+			log.Printf("error closing database: %v", err)
+		}
+	}()
 
 	if err := db.Ping(); err != nil {
 		log.Fatal(err)
@@ -51,6 +61,10 @@ func main() {
 	router := chi.NewRouter()
 
 	router.Get("/health", app.healthHandler)
+	router.Get("/slow", func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(5 * time.Second)
+		w.Write([]byte("done"))
+	})
 
 	router.Route("/applications", func(r chi.Router) {
 		r.Get("/", applicationHandler.GetAll)
@@ -99,11 +113,40 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	log.Printf("Server listening at: %s", address)
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer stop()
 
-	if err := srv.ListenAndServe(); err != nil {
-		log.Fatal(err)
+	go func() {
+		log.Printf("Server listening at: %s", address)
+
+		if err := srv.ListenAndServe(); err != nil &&
+			!errors.Is(err, http.ErrServerClosed) {
+			log.Printf("server error: %v", err)
+		}
+	}()
+
+	<-ctx.Done()
+
+	log.Println("shutdown signal recieved")
+
+	shutdownCtx, cancel := context.WithTimeout(
+		context.Background(),
+		10*time.Second,
+	)
+	defer cancel()
+
+	log.Println("waiting for active requests to finish")
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("graceful shutdown failed: %v", err)
 	}
+
+	log.Println("HTTP server stopped")
+
 }
 
 func (app *applicationServer) healthHandler(w http.ResponseWriter, r *http.Request) {

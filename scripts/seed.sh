@@ -11,7 +11,7 @@ cd "${PROJECT_ROOT}"
 if [[ ! -f .env ]]; then
     echo "Error: .env missing" >&2
     echo "Create it with:"
-    echo "  cp.env.example .env"
+    echo "  cp  .env.example .env"
     exit 1
 fi
 
