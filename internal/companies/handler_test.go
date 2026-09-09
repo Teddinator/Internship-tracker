@@ -3,20 +3,19 @@ package companies
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
+
+	"github.com/teddinator/Internship-tracker/internal/testutil"
 )
 
 func TestCreateCompRejectsInvalidJSON(t *testing.T) {
 	handler := NewHandler(nil)
 
-	request := httptest.NewRequest(
+	request := testutil.NewJSONRequest(
 		http.MethodPost,
 		"/companies/",
-		strings.NewReader(`"{name":`),
+		`"{name":`,
 	)
-
-	request.Header.Set("Content-Type", "application/json")
 
 	recorder := httptest.NewRecorder()
 
@@ -25,28 +24,21 @@ func TestCreateCompRejectsInvalidJSON(t *testing.T) {
 	response := recorder.Result()
 	defer response.Body.Close()
 
-	if response.StatusCode != http.StatusBadRequest {
-		t.Errorf(
-			"status code = %d want %d",
-			response.StatusCode,
-			http.StatusBadRequest,
-		)
-	}
+	testutil.AssertStatus(t, recorder, http.StatusBadRequest)
 }
 
 func TestCreateCompRequiresName(t *testing.T) {
 	handler := NewHandler(nil)
 
-	request := httptest.NewRequest(
+	request := testutil.NewJSONRequest(
 		http.MethodPost,
 		"/companies/",
-		strings.NewReader(`{
+		`{
 			"website": "https://example.com",
 			"industry": "Tech"
-		}`),
+		}`,
 	)
 
-	request.Header.Set("Content-Type", "application/json")
 	recorder := httptest.NewRecorder()
 
 	handler.CreateComp(recorder, request)
@@ -54,12 +46,6 @@ func TestCreateCompRequiresName(t *testing.T) {
 	response := recorder.Result()
 	defer response.Body.Close()
 
-	if response.StatusCode != http.StatusBadRequest {
-		t.Errorf(
-			"status code = %d want %d",
-			response.StatusCode,
-			http.StatusBadRequest,
-		)
-	}
+	testutil.AssertStatus(t, recorder, http.StatusBadRequest)
 
 }
