@@ -26,12 +26,14 @@ import (
 const dbTimeout = 3 * time.Second
 
 type Handler struct {
-	db *sql.DB
+	db    *sql.DB
+	store ApplicationStore
 }
 
 func NewHandler(db *sql.DB) *Handler {
 	return &Handler{
-		db: db,
+		db:    db,
+		store: NewPostgresStore(db),
 	}
 }
 
@@ -179,35 +181,7 @@ func (h *Handler) GetAppByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var a Application
-
-	err = h.db.QueryRowContext(
-		ctx,
-		`
-			SELECT 
-				a.id,
-				a.company_id,
-				c.name,
-				a.role,
-				a.status,
-				a.applied_at,
-				a.created_at,
-				a.updated_at
-			FROM applications AS a
-			JOIN companies AS c
-				ON c.id = a.company_id
-			WHERE a.id = $1
-		`, id,
-	).Scan(
-		&a.ID,
-		&a.CompanyID,
-		&a.Company,
-		&a.Role,
-		&a.Status,
-		&a.AppliedAt,
-		&a.CreatedAt,
-		&a.UpdatedAt,
-	)
+	app, err := h.store.GetByID(ctx, id)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		apierror.NotFound(
@@ -226,7 +200,7 @@ func (h *Handler) GetAppByID(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	response := formattedApplicationResponse(a)
+	response := formattedApplicationResponse(app)
 
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("failed to encode application :%v", err)
