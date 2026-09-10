@@ -977,13 +977,7 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.db.ExecContext(
-		ctx,
-		`	
-			DELETE FROM applications
-			WHERE id = $1
-		`, id,
-	)
+	deleted, err := h.store.Delete(ctx, id)
 
 	if apierror.HandleContextError(w, err) {
 		return
@@ -995,15 +989,7 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rowsAffected, err := result.RowsAffected()
-
-	if err != nil {
-		log.Printf("failed to read affected rows: %v", err)
-		apierror.Internal(w)
-		return
-	}
-
-	if rowsAffected == 0 {
+	if !deleted {
 		apierror.NotFound(
 			w,
 			"application_not_found",

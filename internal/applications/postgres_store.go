@@ -53,3 +53,28 @@ func (s *PostgresStore) GetByID(
 
 	return a, nil
 }
+
+func (s *PostgresStore) Delete(
+	ctx context.Context,
+	id int64,
+) (bool, error) {
+	result, err := s.db.ExecContext(
+		ctx,
+		`
+			DELETE FROM applications
+			WHERE id = $1
+		`,
+		id,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	rowsaffected, err := result.RowsAffected()
+
+	if err != nil {
+		return false, err
+	}
+
+	return rowsaffected > 0, nil
+}

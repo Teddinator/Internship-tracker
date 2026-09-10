@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -15,23 +16,42 @@ import (
 type fakeApplicationStore struct {
 	app Application
 	err error
+
+	gotID  int64
+	called bool
+
+	deleted    bool
+	deletedErr error
 }
 
-func (f fakeApplicationStore) GetByID(
+func (f *fakeApplicationStore) GetByID(
 	ctx context.Context,
 	id int64,
 ) (Application, error) {
+	f.gotID = id
+	f.called = true
 	return f.app, f.err
+}
+
+func (f *fakeApplicationStore) Delete(
+	ctx context.Context,
+	id int64,
+) (bool, error) {
+	f.gotID = id
+	f.called = true
+	return f.deleted, f.deletedErr
 }
 
 func TestGetAppByID(t *testing.T) {
 	tests := []struct {
 		name       string
+		id         string
 		store      fakeApplicationStore
 		wantStatus int
 	}{
 		{
 			name: "application found",
+			id:   "2",
 			store: fakeApplicationStore{
 				app: Application{
 					ID:      2,
@@ -44,6 +64,7 @@ func TestGetAppByID(t *testing.T) {
 		},
 		{
 			name: "application not found",
+			id:   "2",
 			store: fakeApplicationStore{
 				err: sql.ErrNoRows,
 			},
@@ -51,27 +72,36 @@ func TestGetAppByID(t *testing.T) {
 		},
 		{
 			name: "store error",
+			id:   "2",
 			store: fakeApplicationStore{
 				err: errors.New("database failed"),
 			},
 			wantStatus: http.StatusInternalServerError,
 		},
+		{
+			name:       "invalid id",
+			id:         "abc",
+			store:      fakeApplicationStore{},
+			wantStatus: http.StatusBadRequest,
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			store := &test.store
+
 			handler := &Handler{
-				store: test.store,
+				store: store,
 			}
 
 			request := httptest.NewRequest(
 				http.MethodGet,
-				"/applications/2",
+				"/applications/"+test.id,
 				nil,
 			)
 
 			routeContext := chi.NewRouteContext()
-			routeContext.URLParams.Add("id", "2")
+			routeContext.URLParams.Add("id", test.id)
 
 			request = request.WithContext(
 				context.WithValue(
@@ -90,6 +120,121 @@ func TestGetAppByID(t *testing.T) {
 				recorder,
 				test.wantStatus,
 			)
+
+			if test.id == "abc" && store.called {
+				t.Error("store should not be called for invalid id")
+			}
+
+			if test.id == "2" && test.wantStatus == http.StatusOK {
+				if test.store.gotID != 2 {
+					t.Errorf(
+						"store got id %d, want 2",
+						test.store.gotID,
+					)
+				}
+				body := recorder.Body.String()
+
+				if !strings.Contains(body, `"company":"Volvo Cars"`) {
+					t.Errorf("unexpected response body: %s", body)
+				}
+
+				if !strings.Contains(body, `"status":"interview"`) {
+					t.Errorf("unexpected response body: %s", body)
+				}
+			}
+		})
+	}
+}
+
+func TestDeleteApplication(t *testing.T) {
+	tests := []struct {
+		name       string
+		id         string
+		store      fakeApplicationStore
+		wantStatus int
+	}{
+		{
+			name: "application deleted",
+			id:   "2",
+			store: fakeApplicationStore{
+				deleted: true,
+			},
+			wantStatus: http.StatusNoContent,
+		},
+		{
+			name: "application not found",
+			id:   "2",
+			store: fakeApplicationStore{
+				deleted: false,
+			},
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name: "store error",
+			id:   "2",
+			store: fakeApplicationStore{
+				deletedErr: errors.New("database failed"),
+			},
+			wantStatus: http.StatusInternalServerError,
+		},
+		{
+			name:       "invalid id",
+			id:         "abc",
+			store:      fakeApplicationStore{},
+			wantStatus: http.StatusBadRequest,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store := &test.store
+
+			handler := &Handler{
+				store: store,
+			}
+
+			request := httptest.NewRequest(
+				http.MethodDelete,
+				"/applications/"+test.id,
+				nil,
+			)
+
+			routeContext := chi.NewRouteContext()
+			routeContext.URLParams.Add("id", test.id)
+
+			request = request.WithContext(
+				context.WithValue(
+					request.Context(),
+					chi.RouteCtxKey,
+					routeContext,
+				),
+			)
+
+			recorder := httptest.NewRecorder()
+
+			handler.DeleteApp(recorder, request)
+
+			testutil.AssertStatus(
+				t,
+				recorder,
+				test.wantStatus,
+			)
+
+			if test.id == "abc" && store.called {
+				t.Error("store should not be called for invalid id")
+			}
+
+			if test.id == "2" && !store.called {
+				t.Error("store should have been called")
+			}
+
+			if test.id == "2" && store.gotID != 2 {
+				t.Errorf(
+					"store got id %d, want 2",
+					store.gotID,
+				)
+			}
+
 		})
 	}
 }
