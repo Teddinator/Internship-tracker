@@ -22,6 +22,8 @@ type fakeApplicationStore struct {
 	gotID  int64
 	called bool
 
+	gotFilter applicationFilter
+
 	deleted    bool
 	deletedErr error
 }
@@ -31,6 +33,7 @@ func (f *fakeApplicationStore) GetAll(
 	filter applicationFilter,
 ) ([]Application, error) {
 	f.called = true
+	f.gotFilter = filter
 
 	return f.apps, f.err
 }
@@ -51,6 +54,124 @@ func (f *fakeApplicationStore) Delete(
 	f.gotID = id
 	f.called = true
 	return f.deleted, f.deletedErr
+}
+
+func TestGetAllApp(t *testing.T) {
+	tests := []struct {
+		name       string
+		url        string
+		store      fakeApplicationStore
+		wantStatus int
+	}{
+		{
+			name: "applications returned",
+			url:  "/applications?status=interview&location=Gothenburg",
+			store: fakeApplicationStore{
+				apps: []Application{
+					{
+						ID:      1,
+						Company: "Volvo Cars",
+						Role:    "Backend Intern",
+						Status:  "interview",
+					},
+				},
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "invalid status",
+			url:        "/applications?status=banana",
+			store:      fakeApplicationStore{},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "invalid company id",
+			url:        "/applications?company_id=abc",
+			store:      fakeApplicationStore{},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "store error",
+			url:  "/applications",
+			store: fakeApplicationStore{
+				err: errors.New("database failed"),
+			},
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store := &test.store
+
+			handler := NewHandlerWithStore(
+				store,
+				config.New(),
+			)
+
+			request := httptest.NewRequest(
+				http.MethodGet,
+				test.url,
+				nil,
+			)
+
+			recorder := httptest.NewRecorder()
+
+			handler.GetAll(recorder, request)
+
+			testutil.AssertStatus(
+				t,
+				recorder,
+				test.wantStatus,
+			)
+
+			if test.name == "invalid status" && store.called {
+				t.Error("store should not be called for invalid status")
+			}
+
+			if test.name == "invalid company id" && store.called {
+				t.Error("store should not be called for invalid company id")
+			}
+
+			if test.name == "applications returned" {
+				if !store.called {
+					t.Fatal("store should have been called")
+				}
+
+				if store.gotFilter.Status != "interview" {
+					t.Errorf(
+						"got status filter %q, want %q",
+						store.gotFilter.Status,
+						"interview",
+					)
+				}
+
+				if store.gotFilter.Location != "Gothenburg" {
+					t.Errorf(
+						"got location filter %q, want %q",
+						store.gotFilter.Location,
+						"Gothenburg",
+					)
+				}
+
+				body := recorder.Body.String()
+
+				if !strings.Contains(body, `"company":"Volvo Cars"`) {
+					t.Errorf(
+						"unexpected response body: %s",
+						body,
+					)
+				}
+
+				if !strings.Contains(body, `"status":"interview"`) {
+					t.Errorf(
+						"unexpected response body: %s",
+						body,
+					)
+				}
+			}
+		})
+	}
 }
 
 func TestGetAppByID(t *testing.T) {

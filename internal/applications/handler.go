@@ -72,6 +72,7 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 				"invalid_company_id",
 				"company id must be a valid UUID",
 			)
+			return
 		}
 	}
 

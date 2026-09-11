@@ -17,6 +17,7 @@ import (
 
 	"github.com/teddinator/Internship-tracker/internal/applications"
 	"github.com/teddinator/Internship-tracker/internal/companies"
+	"github.com/teddinator/Internship-tracker/internal/config"
 	"github.com/teddinator/Internship-tracker/internal/contacts"
 	"github.com/teddinator/Internship-tracker/internal/followups"
 	"github.com/teddinator/Internship-tracker/internal/notes"
@@ -52,7 +53,9 @@ func main() {
 		db: db,
 	}
 
-	applicationHandler := applications.NewHandler(db)
+	cfg := config.New()
+
+	applicationHandler := applications.NewHandler(db, cfg)
 	companiesHandler := companies.NewHandler(db)
 	notesHandler := notes.NewHandler(db)
 	contactsHandler := contacts.NewHandler(db)
@@ -61,10 +64,6 @@ func main() {
 	router := chi.NewRouter()
 
 	router.Get("/health", app.healthHandler)
-	router.Get("/slow", func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(5 * time.Second)
-		w.Write([]byte("done"))
-	})
 
 	router.Route("/applications", func(r chi.Router) {
 		r.Get("/", applicationHandler.GetAll)
