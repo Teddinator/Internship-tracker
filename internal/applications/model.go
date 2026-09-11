@@ -37,3 +37,10 @@ type applicationIdempotencyInput struct {
 	Status    string  `json:"status"`
 	AppliedAt *string `json:"applied_at"`
 }
+
+type applicationFilter struct {
+	Status    string
+	CompanyID string
+	Location  string
+	Industry  string
+}

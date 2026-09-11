@@ -21,133 +21,67 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/teddinator/Internship-tracker/internal/apierror"
+	"github.com/teddinator/Internship-tracker/internal/config"
 )
 
-const dbTimeout = 3 * time.Second
-
 type Handler struct {
-	db    *sql.DB
-	store ApplicationStore
+	db     *sql.DB
+	store  ApplicationStore
+	config config.Config
 }
 
-func NewHandler(db *sql.DB) *Handler {
+func NewHandler(db *sql.DB, cfg config.Config) *Handler {
 	return &Handler{
-		db:    db,
-		store: NewPostgresStore(db),
+		db:     db,
+		store:  NewPostgresStore(db),
+		config: cfg,
+	}
+}
+
+func NewHandlerWithStore(store ApplicationStore, cfg config.Config) *Handler {
+	return &Handler{
+		store:  store,
+		config: cfg,
 	}
 }
 
 func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), dbTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), h.config.DBTimeout)
 	defer cancel()
 
-	status := strings.TrimSpace(r.URL.Query().Get("status"))
-	companyID := strings.TrimSpace(r.URL.Query().Get("company_id"))
-	location := strings.TrimSpace(r.URL.Query().Get("location"))
-	industry := strings.TrimSpace(r.URL.Query().Get("industry"))
-
-	query := `
-		SELECT
-			a.id,
-			a.company_id,
-			c.name,
-			a.role,
-			a.status,
-			a.applied_at,
-			a.created_at,
-			a.updated_at 
-		FROM applications AS a
-		JOIN companies AS c
-			ON c.id = a.company_id
-		WHERE 1 = 1
-	`
-
-	args := make([]any, 0)
-
-	if status != "" {
-		if !isValidStatus(status) {
-			apierror.BadRequest(
-				w,
-				"invalid_status",
-				"status must be one of: applied, interview, offer, rejected, withdrawn",
-			)
-			return
-		}
-		args = append(args, status)
-		query += fmt.Sprintf(" AND a.status = $%d", len(args))
+	filter := applicationFilter{
+		Status:    strings.TrimSpace(r.URL.Query().Get("status")),
+		CompanyID: strings.TrimSpace(r.URL.Query().Get("company_id")),
+		Location:  strings.TrimSpace(r.URL.Query().Get("location")),
+		Industry:  strings.TrimSpace(r.URL.Query().Get("industry")),
 	}
 
-	if companyID != "" {
-		parsedCompanyID, err := uuid.Parse(companyID)
-		if err != nil {
-			apierror.Write(
-				w,
-				http.StatusBadRequest,
-				"invalid_company_id",
-				"company id must be a valid UUID",
-			)
-			return
-		}
-
-		args = append(args, parsedCompanyID)
-		query += fmt.Sprintf(" AND a.company_id = $%d", len(args))
-	}
-
-	if location != "" {
-		args = append(args, "%"+location+"%")
-		query += fmt.Sprintf(" AND c.location ILIKE $%d", len(args))
-	}
-
-	if industry != "" {
-		args = append(args, "%"+industry+"%")
-		query += fmt.Sprintf(" AND c.Industry ILIKE $%d", len(args))
-	}
-
-	query += " ORDER BY a.id"
-
-	rows, err := h.db.QueryContext(
-		ctx,
-		query,
-		args...,
-	)
-
-	if err != nil {
-		if apierror.HandleContextError(w, err) {
-			log.Printf("request context errr while querying applications: %v", err)
-			return
-		}
-		log.Printf("Failed to query application: %v", err)
-		apierror.Internal(w)
+	if filter.Status != "" && !isValidStatus(filter.Status) {
+		apierror.BadRequest(
+			w,
+			"invalid_status",
+			"status must be one of: applied, interview, offer, rejected, withdrawn",
+		)
 		return
 	}
 
-	defer rows.Close()
+	if filter.CompanyID != "" {
+		if _, err := uuid.Parse(filter.CompanyID); err != nil {
+			apierror.BadRequest(
+				w,
+				"invalid_company_id",
+				"company id must be a valid UUID",
+			)
+		}
+	}
 
-	applications := make([]Application, 0)
-
-	for rows.Next() {
-		var a Application
-
-		if err := rows.Scan(
-			&a.ID,
-			&a.CompanyID,
-			&a.Company,
-			&a.Role,
-			&a.Status,
-			&a.AppliedAt,
-			&a.CreatedAt,
-			&a.UpdatedAt,
-		); err != nil {
-			log.Printf("scan application row: %v", err)
-			apierror.Internal(w)
+	applications, err := h.store.GetAll(ctx, filter)
+	if err != nil {
+		if apierror.HandleContextError(w, err) {
 			return
 		}
 
-		applications = append(applications, a)
-	}
-
-	if err := rows.Err(); err != nil {
-		log.Printf("iterate application rows: %v", err)
+		log.Printf("get all applications: %v", err)
 		apierror.Internal(w)
 		return
 	}
@@ -166,7 +100,7 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetAppByID(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), dbTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), h.config.DBTimeout)
 	defer cancel()
 
 	idString := chi.URLParam(r, "id")
@@ -209,7 +143,7 @@ func (h *Handler) GetAppByID(w http.ResponseWriter, r *http.Request) {
 
 // TODO: Fix context error handling
 func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), dbTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), h.config.DBTimeout)
 	defer cancel()
 
 	idempotencyKey := strings.TrimSpace(
@@ -664,7 +598,7 @@ func (h *Handler) CreateApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), dbTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), h.config.DBTimeout)
 	defer cancel()
 
 	idString := chi.URLParam(r, "id")
@@ -855,7 +789,7 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), h.config.DBTimeout)
 	defer cancel()
 
 	idString := chi.URLParam(r, "id")
@@ -961,7 +895,7 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), dbTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), h.config.DBTimeout)
 	defer cancel()
 
 	idString := chi.URLParam(r, "id")
@@ -1002,7 +936,7 @@ func (h *Handler) DeleteApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ExportCSV(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), dbTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), h.config.DBTimeout)
 	defer cancel()
 
 	rows, err := h.db.QueryContext(

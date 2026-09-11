@@ -3,6 +3,9 @@ package applications
 import (
 	"context"
 	"database/sql"
+	"fmt"
+
+	"github.com/google/uuid"
 )
 
 type PostgresStore struct {
@@ -77,4 +80,92 @@ func (s *PostgresStore) Delete(
 	}
 
 	return rowsaffected > 0, nil
+}
+
+func (s *PostgresStore) GetAll(
+	ctx context.Context,
+	filter applicationFilter,
+) ([]Application, error) {
+	query := `
+		SELECT
+			a.id,
+			a.company_id,
+			c.name,
+			a.role,
+			a.status,
+			a.applied_at,
+			a.created_at,
+			a.updated_at 
+		FROM applications AS a
+		JOIN companies AS c
+			ON c.id = a.company_id
+		WHERE 1 = 1
+	`
+
+	args := make([]any, 0)
+
+	if filter.Status != "" {
+		args = append(args, filter.Status)
+		query += fmt.Sprintf(" AND a.status = $%d", len(args))
+
+	}
+
+	if filter.CompanyID != "" {
+		companyID, err := uuid.Parse(filter.CompanyID)
+		if err != nil {
+			return nil, err
+		}
+
+		args = append(args, companyID)
+		query += fmt.Sprintf(" AND a.company_id = $%d", len(args))
+	}
+
+	if filter.Location != "" {
+		args = append(args, "%"+filter.Location+"%")
+		query += fmt.Sprintf(" AND c.location ILIKE $%d", len(args))
+	}
+
+	if filter.Industry != "" {
+		args = append(args, "%"+filter.Industry+"%")
+		query += fmt.Sprintf(" AND c.industry ILIKE $%d", len(args))
+	}
+
+	query += " ORDER BY a.id"
+
+	rows, err := s.db.QueryContext(
+		ctx,
+		query,
+		args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	applications := make([]Application, 0)
+
+	for rows.Next() {
+		var app Application
+
+		if err := rows.Scan(
+			&app.ID,
+			&app.CompanyID,
+			&app.Company,
+			&app.Role,
+			&app.Status,
+			&app.AppliedAt,
+			&app.CreatedAt,
+			&app.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+
+		applications = append(applications, app)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return applications, nil
 }

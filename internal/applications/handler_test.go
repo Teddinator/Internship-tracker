@@ -10,18 +10,29 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/teddinator/Internship-tracker/internal/config"
 	"github.com/teddinator/Internship-tracker/internal/testutil"
 )
 
 type fakeApplicationStore struct {
-	app Application
-	err error
+	app  Application
+	apps []Application
+	err  error
 
 	gotID  int64
 	called bool
 
 	deleted    bool
 	deletedErr error
+}
+
+func (f *fakeApplicationStore) GetAll(
+	ctx context.Context,
+	filter applicationFilter,
+) ([]Application, error) {
+	f.called = true
+
+	return f.apps, f.err
 }
 
 func (f *fakeApplicationStore) GetByID(
@@ -91,7 +102,8 @@ func TestGetAppByID(t *testing.T) {
 			store := &test.store
 
 			handler := &Handler{
-				store: store,
+				store:  store,
+				config: config.New(),
 			}
 
 			request := httptest.NewRequest(
@@ -189,9 +201,10 @@ func TestDeleteApplication(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			store := &test.store
 
-			handler := &Handler{
-				store: store,
-			}
+			handler := NewHandlerWithStore(
+				store,
+				config.New(),
+			)
 
 			request := httptest.NewRequest(
 				http.MethodDelete,
@@ -240,7 +253,10 @@ func TestDeleteApplication(t *testing.T) {
 }
 
 func TestCreateApplication(t *testing.T) {
-	handler := NewHandler(nil)
+	handler := NewHandlerWithStore(
+		&fakeApplicationStore{},
+		config.New(),
+	)
 
 	tests := []struct {
 		name       string
