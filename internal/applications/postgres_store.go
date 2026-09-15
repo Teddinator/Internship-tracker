@@ -16,72 +16,6 @@ func NewPostgresStore(db *sql.DB) *PostgresStore {
 	return &PostgresStore{db: db}
 }
 
-func (s *PostgresStore) GetByID(
-	ctx context.Context,
-	id int64,
-) (Application, error) {
-	var a Application
-
-	err := s.db.QueryRowContext(
-		ctx,
-		`
-			SELECT 
-				a.id,
-				a.company_id,
-				c.name,
-				a.role,
-				a.status,
-				a.applied_at,
-				a.created_at,
-				a.updated_at
-			FROM applications AS a
-			JOIN companies AS c
-				ON c.id = a.company_id
-			WHERE a.id = $1
-		`, id,
-	).Scan(
-		&a.ID,
-		&a.CompanyID,
-		&a.Company,
-		&a.Role,
-		&a.Status,
-		&a.AppliedAt,
-		&a.CreatedAt,
-		&a.UpdatedAt,
-	)
-
-	if err != nil {
-		return Application{}, err
-	}
-
-	return a, nil
-}
-
-func (s *PostgresStore) Delete(
-	ctx context.Context,
-	id int64,
-) (bool, error) {
-	result, err := s.db.ExecContext(
-		ctx,
-		`
-			DELETE FROM applications
-			WHERE id = $1
-		`,
-		id,
-	)
-	if err != nil {
-		return false, err
-	}
-
-	rowsaffected, err := result.RowsAffected()
-
-	if err != nil {
-		return false, err
-	}
-
-	return rowsaffected > 0, nil
-}
-
 func (s *PostgresStore) GetAll(
 	ctx context.Context,
 	filter applicationFilter,
@@ -168,4 +102,119 @@ func (s *PostgresStore) GetAll(
 	}
 
 	return applications, nil
+}
+
+func (s *PostgresStore) GetByID(
+	ctx context.Context,
+	id int64,
+) (Application, error) {
+	var a Application
+
+	err := s.db.QueryRowContext(
+		ctx,
+		`
+			SELECT 
+				a.id,
+				a.company_id,
+				c.name,
+				a.role,
+				a.status,
+				a.applied_at,
+				a.created_at,
+				a.updated_at
+			FROM applications AS a
+			JOIN companies AS c
+				ON c.id = a.company_id
+			WHERE a.id = $1
+		`, id,
+	).Scan(
+		&a.ID,
+		&a.CompanyID,
+		&a.Company,
+		&a.Role,
+		&a.Status,
+		&a.AppliedAt,
+		&a.CreatedAt,
+		&a.UpdatedAt,
+	)
+
+	if err != nil {
+		return Application{}, err
+	}
+
+	return a, nil
+}
+
+func (s *PostgresStore) Delete(
+	ctx context.Context,
+	id int64,
+) (bool, error) {
+	result, err := s.db.ExecContext(
+		ctx,
+		`
+			DELETE FROM applications
+			WHERE id = $1
+		`,
+		id,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	rowsaffected, err := result.RowsAffected()
+
+	if err != nil {
+		return false, err
+	}
+
+	return rowsaffected > 0, nil
+}
+
+func (s *PostgresStore) UpdateStatus(ctx context.Context, id int64, status string) (Application, error) {
+	var app Application
+
+	err := s.db.QueryRowContext(
+		ctx,
+		`
+			UPDATE applications
+			SET
+				status = $1,
+				updated_at = NOW()
+			WHERE id = $2
+			RETURNING
+				id,
+				company_id,
+				role,
+				status,
+				applied_at,
+				created_at,
+				updated_at
+		`,
+		status,
+		id,
+	).Scan(
+		&app.ID,
+		&app.CompanyID,
+		&app.Role,
+		&app.Status,
+		&app.AppliedAt,
+		&app.CreatedAt,
+		&app.UpdatedAt,
+	)
+
+	if err != nil {
+		return Application{}, err
+	}
+
+	err = s.db.QueryRowContext(
+		ctx,
+		`SELECT name FROM companies WHERE id = $1`,
+		app.CompanyID,
+	).Scan(&app.Company)
+
+	if err != nil {
+		return Application{}, err
+	}
+
+	return app, nil
 }

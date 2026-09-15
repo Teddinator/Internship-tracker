@@ -19,10 +19,10 @@ type fakeApplicationStore struct {
 	apps []Application
 	err  error
 
-	gotID  int64
-	called bool
-
+	gotID     int64
+	gotStatus string
 	gotFilter applicationFilter
+	called    bool
 
 	deleted    bool
 	deletedErr error
@@ -54,6 +54,18 @@ func (f *fakeApplicationStore) Delete(
 	f.gotID = id
 	f.called = true
 	return f.deleted, f.deletedErr
+}
+
+func (f *fakeApplicationStore) UpdateStatus(
+	ctx context.Context,
+	id int64,
+	status string,
+) (Application, error) {
+	f.called = true
+	f.gotID = id
+	f.gotStatus = status
+
+	return f.app, f.err
 }
 
 func TestGetAllApp(t *testing.T) {
@@ -443,4 +455,136 @@ func TestCreateApplication(t *testing.T) {
 			testutil.AssertStatus(t, recorder, test.wantStatus)
 		})
 	}
+}
+
+func TestUpdateStatus(t *testing.T) {
+	tests := []struct {
+		name       string
+		id         string
+		body       string
+		store      fakeApplicationStore
+		wantStatus int
+	}{
+		{
+			name: "status updated",
+			id:   "2",
+			body: `{"status":"interview"}`,
+			store: fakeApplicationStore{
+				app: Application{
+					ID:      2,
+					Company: "Volvo Cars",
+					Role:    "Backend Intern",
+					Status:  "interview",
+				},
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "invalid id",
+			id:         "abc",
+			body:       `{"status":"interview"}`,
+			store:      fakeApplicationStore{},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "invalid json",
+			id:         "2",
+			body:       `{`,
+			store:      fakeApplicationStore{},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "store error",
+			id:   "2",
+			body: `{"status":"interview"}`,
+			store: fakeApplicationStore{
+				err: errors.New("database failed"),
+			},
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store := &test.store
+
+			handler := NewHandlerWithStore(
+				store,
+				config.New(),
+			)
+
+			request := testutil.NewJSONRequest(
+				http.MethodPatch,
+				"/applications/"+test.id+"/status",
+				test.body,
+			)
+
+			routeContext := chi.NewRouteContext()
+			routeContext.URLParams.Add("id", test.id)
+
+			request = request.WithContext(
+				context.WithValue(
+					request.Context(),
+					chi.RouteCtxKey,
+					routeContext,
+				),
+			)
+
+			recorder := httptest.NewRecorder()
+
+			handler.UpdateStatus(recorder, request)
+
+			testutil.AssertStatus(
+				t,
+				recorder,
+				test.wantStatus,
+			)
+
+			if test.name == "invalid id" && store.called {
+				t.Error("store should not have been called for invalid id")
+			}
+
+			if test.name == "invalid json" && store.called {
+				t.Error("store should not have been called for invalid json")
+			}
+
+			if test.name == "invalid status" && store.called {
+				t.Error("store should not have been called for invalid status")
+			}
+
+			if test.name == "status updated" {
+				if !store.called {
+					t.Fatal("store should not have been called")
+				}
+
+				if store.gotID != 2 {
+					t.Errorf(
+						"store got id %d,want 2",
+						store.gotID,
+					)
+				}
+
+				if store.gotStatus != "interview" {
+					t.Errorf(
+						"store got status %q, want %q",
+						store.gotStatus,
+						"interview",
+					)
+				}
+
+				body := recorder.Body.String()
+
+				if !strings.Contains(
+					body,
+					`"status":"interview"`,
+				) {
+					t.Errorf(
+						"unexpectedresponse body : %s",
+						body,
+					)
+				}
+			}
+		})
+	}
+
 }

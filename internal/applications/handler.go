@@ -830,37 +830,13 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 			"invalid_status",
 			"status must be one of: applied, interview, offer, rejected, withdrawn",
 		)
+		return
 	}
 
-	var app Application
-
-	err = h.db.QueryRowContext(
+	app, err := h.store.UpdateStatus(
 		ctx,
-		`
-			UPDATE applications
-			SET
-				status = $1,
-				updated_at = NOW()
-			WHERE id = $2
-			RETURNING
-				id,
-				company_id,
-				role,
-				status,
-				applied_at,
-				created_at,
-				updated_at
-		`,
-		input.Status,
 		id,
-	).Scan(
-		&app.ID,
-		&app.CompanyID,
-		&app.Role,
-		&app.Status,
-		&app.AppliedAt,
-		&app.CreatedAt,
-		&app.UpdatedAt,
+		input.Status,
 	)
 
 	if apierror.HandleContextError(w, err) {
@@ -882,15 +858,8 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.db.QueryRowContext(
-		ctx,
-		`SELECT name FROM companies WHERE id = $1`,
-		app.CompanyID,
-	).Scan(&app.Company)
-
-	if err != nil {
-		log.Printf("failed to retreive company after status update: %v", err)
-		apierror.Internal(w)
+	if err := json.NewEncoder(w).Encode(app); err != nil {
+		log.Printf("failed to encode application: %v", err)
 		return
 	}
 }
