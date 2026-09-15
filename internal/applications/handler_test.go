@@ -22,6 +22,7 @@ type fakeApplicationStore struct {
 	gotID     int64
 	gotStatus string
 	gotFilter applicationFilter
+	gotInput  updateApplicationInput
 	called    bool
 
 	deleted    bool
@@ -54,6 +55,18 @@ func (f *fakeApplicationStore) Delete(
 	f.gotID = id
 	f.called = true
 	return f.deleted, f.deletedErr
+}
+
+func (f *fakeApplicationStore) UpdateApp(
+	ctx context.Context,
+	id int64,
+	input updateApplicationInput,
+) (Application, error) {
+	f.called = true
+	f.gotID = id
+	f.gotInput = input
+
+	return f.app, f.err
 }
 
 func (f *fakeApplicationStore) UpdateStatus(
@@ -453,6 +466,203 @@ func TestCreateApplication(t *testing.T) {
 			handler.CreateApp(recorder, request)
 
 			testutil.AssertStatus(t, recorder, test.wantStatus)
+		})
+	}
+}
+
+func TestUpdateApp(t *testing.T) {
+	tests := []struct {
+		name       string
+		id         string
+		body       string
+		store      fakeApplicationStore
+		wantStatus int
+	}{
+		{
+			name: "application updated",
+			id:   "2",
+			body: `{
+				"company_id":"22222222-2222-2222-2222-222222222222",
+				"role":"Backend Intern",
+				"status":"interview",
+				"applied_at":"2026-09-15"
+			}`,
+			store: fakeApplicationStore{
+				app: Application{
+					ID:        2,
+					CompanyID: "22222222-2222-2222-2222-222222222222",
+					Company:   "Volvo Cars",
+					Role:      "Backend Intern",
+					Status:    "interview",
+				},
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "invalid id",
+			id:   "abc",
+			body: `{
+				"company_id":"22222222-2222-2222-2222-222222222222",
+				"role":"Backend Intern",
+				"status":"interview"
+			}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "invalid json",
+			id:         "2",
+			body:       `{`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "missing company id",
+			id:   "2",
+			body: `{
+				"company_id":"",
+				"role":"Backend Intern",
+				"status":"interview"
+			}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "invalid compnay id",
+			id:   "2",
+			body: `{
+				"company_id":"abc",
+				"role":"Backend Intern",
+				"status":"interview"
+			}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "invalid status",
+			id:   "2",
+			body: `{
+				"company_id":"22222222-2222-2222-2222-222222222222",
+				"role":"Backend Intern",
+				"status":"banana"
+			}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "invalid applied at",
+			id:   "2",
+			body: `{
+				"company_id":"22222222-2222-2222-2222-222222222222",
+				"role":"Backend Intern",
+				"status":"interview",
+				"applied_at":"15-09-2026"
+			}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "application not found",
+			id:   "2",
+			body: `{
+				"company_id":"22222222-2222-2222-2222-222222222222",
+				"role":"Backend Intern",
+				"status":"interview"
+			}`,
+			store: fakeApplicationStore{
+				err: sql.ErrNoRows,
+			},
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name: "store error",
+			id:   "2",
+			body: `{
+				"company_id":"22222222-2222-2222-2222-222222222222",
+				"role":"Backend Intern",
+				"status":"interview"
+			}`,
+			store: fakeApplicationStore{
+				err: errors.New("Database failed"),
+			},
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store := &test.store
+
+			handler := NewHandlerWithStore(
+				store,
+				config.New(),
+			)
+
+			request := testutil.NewJSONRequest(
+				http.MethodPut,
+				"/applications/"+test.id,
+				test.body,
+			)
+
+			routeContext := chi.NewRouteContext()
+			routeContext.URLParams.Add("id", test.id)
+
+			request = request.WithContext(
+				context.WithValue(
+					request.Context(),
+					chi.RouteCtxKey,
+					routeContext,
+				),
+			)
+
+			recorder := httptest.NewRecorder()
+
+			handler.UpdateApp(recorder, request)
+
+			testutil.AssertStatus(
+				t,
+				recorder,
+				test.wantStatus,
+			)
+
+			if test.wantStatus == http.StatusBadRequest && store.called {
+				t.Error("store should not be called for invalid request")
+			}
+
+			if test.name == "application updated" {
+				if !store.called {
+					t.Fatal("store should have been called")
+				}
+
+				if store.gotID != 2 {
+					t.Errorf(
+						"store got id %d, want 2",
+						store.gotID,
+					)
+				}
+
+				if store.gotInput.Role != "Backend Intern" {
+					t.Errorf(
+						"store got role %q, want %q",
+						store.gotInput.Role,
+						"Backend intern",
+					)
+				}
+
+				if store.gotInput.Status != "interview" {
+					t.Errorf(
+						"store got status %q, want %q",
+						store.gotInput.Status,
+						"interview",
+					)
+				}
+
+				body := recorder.Body.String()
+
+				if !strings.Contains(
+					body,
+					`"company":"Volvo Cars"`,
+				) {
+					t.Errorf(
+						"unexpected response body: %s",
+						body,
+					)
+				}
+			}
 		})
 	}
 }

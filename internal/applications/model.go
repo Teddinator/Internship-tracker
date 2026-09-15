@@ -1,6 +1,10 @@
 package applications
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type Application struct {
 	ID        int64      `json:"id"`
@@ -18,6 +22,13 @@ type applicationInput struct {
 	Role      string  `json:"role"`
 	Status    string  `json:"status"`
 	AppliedAt *string `json:"applied_at"`
+}
+
+type updateApplicationInput struct {
+	CompanyID uuid.UUID
+	Role      string
+	Status    string
+	AppliedAt *time.Time
 }
 
 type applicationResponse struct {

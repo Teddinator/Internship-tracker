@@ -170,6 +170,61 @@ func (s *PostgresStore) Delete(
 	return rowsaffected > 0, nil
 }
 
+func (s *PostgresStore) UpdateApp(ctx context.Context, id int64, input updateApplicationInput) (Application, error) {
+	var app Application
+
+	err := s.db.QueryRowContext(
+		ctx,
+		`
+			UPDATE applications
+			SET
+				company_id = $1,
+				role = $2,
+				status = $3,
+				applied_at = $4,
+				updated_at = NOW()
+			WHERE id = $5
+			RETURNING
+				id,
+				company_id,
+				role,
+				status,
+				applied_at,
+				updated_at,
+				created_at
+		`,
+		input.CompanyID,
+		input.Role,
+		input.Status,
+		input.AppliedAt,
+		id,
+	).Scan(
+		&app.ID,
+		&app.CompanyID,
+		&app.Role,
+		&app.Status,
+		&app.AppliedAt,
+		&app.UpdatedAt,
+		&app.CreatedAt,
+	)
+
+	if err != nil {
+		return Application{}, err
+	}
+
+	err = s.db.QueryRowContext(
+		ctx,
+		`SELECT name FROM companies WHERE id = $1`,
+		id,
+	).Scan(&app.Company)
+
+	if err != nil {
+		return Application{}, err
+	}
+
+	return app, nil
+}
+
 func (s *PostgresStore) UpdateStatus(ctx context.Context, id int64, status string) (Application, error) {
 	var app Application
 

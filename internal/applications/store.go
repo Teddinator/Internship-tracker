@@ -7,4 +7,5 @@ type ApplicationStore interface {
 	GetByID(ctx context.Context, id int64) (Application, error)
 	Delete(ctx context.Context, id int64) (bool, error)
 	UpdateStatus(ctx context.Context, id int64, status string) (Application, error)
+	UpdateApp(ctx context.Context, id int64, input updateApplicationInput) (Application, error)
 }

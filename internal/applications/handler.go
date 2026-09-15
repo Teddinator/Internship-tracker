@@ -690,55 +690,31 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var app Application
-
-	err = h.db.QueryRowContext(
-		ctx,
-		`
-			UPDATE applications
-			SET
-				company_id = $1,
-				role = $2,
-				status = $3,
-				applied_at = $4,
-				updated_at = NOW()
-			WHERE id = $5
-			RETURNING
-				id,
-				company_id,
-				role,
-				status,
-				applied_at,
-				updated_at,
-				created_at
-		`,
-		CompanyID,
-		input.Role,
-		input.Status,
-		appliedAt,
-		id,
-	).Scan(
-		&app.ID,
-		&app.CompanyID,
-		&app.Role,
-		&app.Status,
-		&app.AppliedAt,
-		&app.UpdatedAt,
-		&app.CreatedAt,
-	)
-
-	if errors.Is(err, sql.ErrNoRows) {
-		apierror.NotFound(
-			w,
-			"application_not_found",
-			"application not found",
-		)
-		return
+	storeInput := updateApplicationInput{
+		CompanyID: CompanyID,
+		Role:      input.Role,
+		Status:    input.Status,
+		AppliedAt: appliedAt,
 	}
+
+	app, err := h.store.UpdateApp(
+		ctx,
+		id,
+		storeInput,
+	)
 
 	if err != nil {
 		if apierror.HandleContextError(w, err) {
 			log.Printf("context error updating application: %d: %v", id, err)
+			return
+		}
+
+		if errors.Is(err, sql.ErrNoRows) {
+			apierror.NotFound(
+				w,
+				"application_not_found",
+				"application not found",
+			)
 			return
 		}
 
@@ -753,27 +729,6 @@ func (h *Handler) UpdateApp(w http.ResponseWriter, r *http.Request) {
 		}
 
 		log.Printf("update application %d, %v", id, err)
-		apierror.Internal(w)
-		return
-	}
-
-	err = h.db.QueryRowContext(
-		ctx,
-		`SELECT name FROM companies WHERE id = $1`,
-		CompanyID,
-	).Scan(&app.Company)
-
-	if err != nil {
-		if apierror.HandleContextError(w, err) {
-			log.Printf(
-				"context error retrieving company for application %d: %v",
-				id,
-				err,
-			)
-			return
-		}
-
-		log.Printf("application %d updated but failed to retrieve company name: %v", id, err)
 		apierror.Internal(w)
 		return
 	}
