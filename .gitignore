@@ -8,3 +8,7 @@ me
 tmp/
 # Docs
 cheatsheet.md
+# roadmap files
+PROJECT_GUIDE.md
+#Kompilerad fil
+bin/
