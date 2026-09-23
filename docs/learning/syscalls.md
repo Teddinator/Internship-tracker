@@ -78,3 +78,21 @@ File descriptors gjorde det möjligt att identifiera vilka resurser syscalls arb
 - `fd 7` -> HTTP listening socket
 - `fd 8` -> Klient anslutning
 - `fd 2` -> stderr
+
+## Failure experiment
+
+Jag stoppade PostgreSQL medan API:t fortfarande körde och skickade sedan samma request igen.
+
+HTTP-requesten kom fortfarande in:
+
+```text
+read(8, "GET /applications HTTP/1.1 ...", 4096) = 90
+```
+
+Men när API:t försökte använda databasen misslyckades operationen. API:t loggade ett fel till `stderr` och svarade klienten med:
+
+```text
+HTTP/1.1 500 Internal Server Error
+```
+
+Det visade att HTTP-servern fortsatte fungera även när databasen var otillgänglig, men endpointen kunde inte slutföra arbetet utan PostgreSQL.
