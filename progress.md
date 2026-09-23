@@ -34,13 +34,34 @@ PID/PPID: 10467/8828 User: theodor (UID 1000) HTTP: TCP *:8080 (LISTEN) PostgreS
 ### Key takeaway
 A Linux process has an identity, inherited environment, virtual address space and file descriptors that refer to open kernel resources.
 
+### Week 2 — Title
+
+**Status:** Completed
+**Time:** 4 hours
+
+#### Done
+- [x] Main lab
+- [x] Failure experiment
+- [x] Learning note
+- [ ] Remaining task
+
+#### Key evidence
+```text
+accept4(7, ...) = 8
+read(8, "GET /applications HTTP/1.1 ...", 4096) = 90
+write(8, "HTTP/1.1 200 OK ...", 2352) = 2352
+```
+
+### Key takeaway
+System calls are the interface processes use to request services from the Linux kernel.
+File descriptors identify resources opened by a process, such as file and sockets. In the lab, I could follow an HTTP request by seeing the API accept a connection, read the request, communicate with PostgreSQL through another file descriptor, and write the HTTP response back to the client.
 
 ## Completed Weeks
 
 | Week | Status | Key takeaway | Main artifact |
 |---|---|---|---|
-| 1 | Not started | | |
-| 2 | Not started | | |
+| 1 | Completed | | |
+| 2 | Completed | | |
 | 3 | Not started | | |
 
 ## Skills Matrix
