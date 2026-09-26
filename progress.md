@@ -1,9 +1,9 @@
 # Systems Engineering Progress
 
 ## Current status
-**Current week:** 2  
+**Current week:** 3  
 **Current phase:** Linux and Operating Systems  
-**Started:** YYYY-MM-DD  
+**Started:** 2026-09-21  
 **Target weekly time:** ~10h  
 **Primary project:** Internship-tracker
 
@@ -55,6 +55,25 @@ write(8, "HTTP/1.1 200 OK ...", 2352) = 2352
 ### Key takeaway
 System calls are the interface processes use to request services from the Linux kernel.
 File descriptors identify resources opened by a process, such as file and sockets. In the lab, I could follow an HTTP request by seeing the API accept a connection, read the request, communicate with PostgreSQL through another file descriptor, and write the HTTP response back to the client.
+
+### Week 3 — Processes and signals
+
+**Status:** In progress
+
+#### Done
+- [x] Tested SIGTERM, SIGINT and SIGKILL.
+- [x] Tested SIGTERM during active requests of 5 and 12 seconds.
+- [x] Observed parent/child processes and a zombie process.
+- [x] Wrote `docs/learning/process-signals.md`.
+- [ ] Read How Linux Works, chapter 5-6.
+
+#### Key evidence
+- 5-second request: `200 OK`; shutdown waited for the response.
+- 12-second request: `context deadline exceeded` after 10 seconds; curl reported `Empty reply from server`.
+- Zombie: `STAT Z` before `waitpid()`; no process entry afterward.
+
+#### Key takeaway
+SIGTERM and SIGINT use the API's graceful shutdown path. SIGKILL stops it immediately. Graceful shutdown waits for active requests only until its deadline expires.
 
 ## Completed Weeks
 
