@@ -1,7 +1,7 @@
 # Systems Engineering Progress
 
 ## Current status
-**Current week:** 3  
+**Current week:** 4  
 **Current phase:** Linux and Operating Systems  
 **Started:** 2026-09-21  
 **Target weekly time:** ~10h  
@@ -9,8 +9,6 @@
 
 ## How to use this file
 Update at the end of every study week. Keep entries short but concrete.
-
-## Current Week
 
 ### Week 1 — Linux anatomy
 
@@ -65,7 +63,7 @@ File descriptors identify resources opened by a process, such as file and socket
 - [x] Tested SIGTERM during active requests of 5 and 12 seconds.
 - [x] Observed parent/child processes and a zombie process.
 - [x] Wrote `docs/learning/process-signals.md`.
-- [ ] Read How Linux Works, chapter 5-6.
+- [X] Read How Linux Works, chapter 5-6.
 
 #### Key evidence
 - 5-second request: `200 OK`; shutdown waited for the response.
@@ -75,13 +73,36 @@ File descriptors identify resources opened by a process, such as file and socket
 #### Key takeaway
 SIGTERM and SIGINT use the API's graceful shutdown path. SIGKILL stops it immediately. Graceful shutdown waits for active requests only until its deadline expires.
 
+### Week 4 — CPU and scheduling
+
+**Status:** Completed  
+**Time:** ~4 hours
+
+#### Done
+- [x] Built a CPU-bound Go lab.
+- [x] Tested 1, 2, 4, 20 and 100 goroutines.
+- [x] Tested `GOMAXPROCS` from 1 to 16.
+- [x] Measured CPU usage with `time`, `top` and `pidstat`.
+- [x] Wrote `docs/learning/cpu-scheduling.md`.
+- [ ] Read How Linux Works, chapter 8.1–8.5.
+
+#### Key evidence
+- `GOMAXPROCS=1` → real 1.23s, CPU ~100%
+- `GOMAXPROCS=8` → real 0.16s, CPU ~800%
+- `GOMAXPROCS=16` → real 0.17s, CPU ~1480%
+
+### Key takeaway
+Goroutines are scheduled by the Go runtime onto OS threads, which Linux schedules onto logical CPUs. More goroutines can increase parallelism, but CPU-bound performance is ultimately limited by available hardware.
+
 ## Completed Weeks
 
 | Week | Status | Key takeaway | Main artifact |
 |---|---|---|---|
 | 1 | Completed | | |
 | 2 | Completed | | |
-| 3 | Not started | | |
+| 3 | Completed | | |
+| 4 | In progress | | |
+| 5 | Not started | | |
 
 ## Skills Matrix
 Scale:
