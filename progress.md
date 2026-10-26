@@ -1,7 +1,7 @@
 # Systems Engineering Progress
 
 ## Current status
-**Current week:** 4  
+**Current week:** 5  
 **Current phase:** Linux and Operating Systems  
 **Started:** 2026-09-21  
 **Target weekly time:** ~10h  
@@ -84,7 +84,7 @@ SIGTERM and SIGINT use the API's graceful shutdown path. SIGKILL stops it immedi
 - [x] Tested `GOMAXPROCS` from 1 to 16.
 - [x] Measured CPU usage with `time`, `top` and `pidstat`.
 - [x] Wrote `docs/learning/cpu-scheduling.md`.
-- [ ] Read How Linux Works, chapter 8.1–8.5.
+- [X] Read How Linux Works, chapter 8.1–8.5.
 
 #### Key evidence
 - `GOMAXPROCS=1` → real 1.23s, CPU ~100%
@@ -94,6 +94,41 @@ SIGTERM and SIGINT use the API's graceful shutdown path. SIGKILL stops it immedi
 ### Key takeaway
 Goroutines are scheduled by the Go runtime onto OS threads, which Linux schedules onto logical CPUs. More goroutines can increase parallelism, but CPU-bound performance is ultimately limited by available hardware.
 
+### Week 5 — Memory
+
+**Status:** Completed
+**Time:** 3,5 hours
+
+#### Done
+- [x] Main lab
+- [x] Failure experiment
+- [x] Learning note
+- [ ] Remaining task
+
+#### Key evidence
+| Mätning | VSZ | RSS |
+|---|---:|---:|
+| Före allokering | ~1198 MiB | ~2,3 MiB |
+| Efter allokering | ~1456 MiB | ~3,1 MiB |
+| Efter skrivning | ~1456 MiB | ~203,1 MiB |
+
+**Förväntade minor page faults:** 51 200  
+**Observerad ökning:** 51 202  
+**Major page faults:** 0
+
+```text
+Type: inuse_space
+Total: 201.50 MB
+
+flat: 200 MB
+flat%: 99.25%
+function: main.main
+```
+
+### Key takeaway
+Att Varje process har eget minnesutrymme, större än det har på ram och kan få använda ram genom kerneln som allokerar minne från applikationen till ram genom page faults.
+Om det inte redan finns i ram. Virtuellt utrymme har heap och stack, heap är objekt och andra objekt som kan behövs för programmet. Allokeras manuellt eller av garbage collector. Stack är sekventiell och hanterar bara funktioner och lokala variabler som behövs för att köra programmet.
+
 ## Completed Weeks
 
 | Week | Status | Key takeaway | Main artifact |
@@ -101,8 +136,8 @@ Goroutines are scheduled by the Go runtime onto OS threads, which Linux schedule
 | 1 | Completed | | |
 | 2 | Completed | | |
 | 3 | Completed | | |
-| 4 | In progress | | |
-| 5 | Not started | | |
+| 4 | Completed | | |
+| 5 | Completed | | |
 
 ## Skills Matrix
 Scale:
