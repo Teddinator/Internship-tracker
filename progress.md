@@ -1,7 +1,7 @@
 # Systems Engineering Progress
 
 ## Current status
-**Current week:** 5  
+**Current week:** 7  
 **Current phase:** Linux and Operating Systems  
 **Started:** 2026-09-21  
 **Target weekly time:** ~10h  
@@ -129,6 +129,28 @@ function: main.main
 Att Varje process har eget minnesutrymme, större än det har på ram och kan få använda ram genom kerneln som allokerar minne från applikationen till ram genom page faults.
 Om det inte redan finns i ram. Virtuellt utrymme har heap och stack, heap är objekt och andra objekt som kan behövs för programmet. Allokeras manuellt eller av garbage collector. Stack är sekventiell och hanterar bara funktioner och lokala variabler som behövs för att köra programmet.
 
+### Week 6 — Computer architecture and CPU-cache
+Status: Completed
+Time: 2.5h
+Done
+- [x] Läste utvalda delar av CS:APP kapitel 6 om minneshierarki, SRAM/DRAM och minnesåtkomst.
+- [x] Byggde Go-benchmarks för sekventiell och slumpmässig läsning av en slice.
+- [x] Testade fem datastorlekar med go test -bench=. -benchmem -count=3.
+- [x] Skrev docs/learning/cpu-cache.md.
+- [X] Verifiera med ett test att båda funktionerna ger samma summa.
+- [ ] Bonus: undersök cache misses med perf om möjligt.
+#### Key evidence
+Antal element	Sekventiellt	Slumpmässigt
+1 000	488 ns/op	266 ns/op
+10 000	4 932 ns/op	4 599 ns/op
+100 000	48 208 ns/op	78 471 ns/op
+1 000 000	485 825 ns/op	912 046 ns/op
+10 000 000	5 108 143 ns/op	50 557 455 ns/op
+
+
+### Key takeaway
+Sekventiell minnesåtkomst utnyttjar spatial locality och CPU-cache effektivt. För 10 miljoner element tog slumpmässig indexering nästan 10 gånger så lång tid. En del av skillnaden kan också bero på den extra index-slicen, så resultatet är inte ett direkt mått på cache misses.
+
 ## Completed Weeks
 
 | Week | Status | Key takeaway | Main artifact |
@@ -138,6 +160,8 @@ Om det inte redan finns i ram. Virtuellt utrymme har heap och stack, heap är ob
 | 3 | Completed | | |
 | 4 | Completed | | |
 | 5 | Completed | | |
+| 6 | Completed | | |
+| 7 | Not started | | |
 
 ## Skills Matrix
 Scale:
