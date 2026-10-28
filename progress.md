@@ -1,7 +1,7 @@
 # Systems Engineering Progress
 
 ## Current status
-**Current week:** 7  
+**Current week:** 8 
 **Current phase:** Linux and Operating Systems  
 **Started:** 2026-09-21  
 **Target weekly time:** ~10h  
@@ -177,6 +177,36 @@ Sekventiell minnesåtkomst utnyttjar spatial locality och CPU-cache effektivt. F
 Linux separates filenames from file identity through inodes. Filesystems are mounted into a shared directory tree. Page cache makes writes efficient, while fsync provides stronger durability guarantees at the cost of latency.
 
 
+### Week 8 — I/O and Batching
+
+**Status:** Completed
+**Time:** 4 hours
+
+#### Done
+- [x] Studied PostgreSQL WAL, checkpoints, indexes and constraints.
+- [x] Built Go benchmark for three INSERT strategies.
+- [x] Measured latency and throughput.
+- [x] Observed SSD write activity using iostat.
+- [x] Tested transaction rollback after a constraint violation.
+- [x] Wrote docs/learning/io-batching.md.
+
+#### Key evidence
+
+| Method | Time | Throughput |
+|---|---:|---:|
+| Individual INSERTs | 1069.85 ms | 935 rows/s |
+| Multi-row INSERTs | 15.08 ms | 66299 rows/s |
+| Transaction batches | 86.13 ms | 11610 rows/s |
+
+- Multi-row INSERTs: ~71x faster than individual INSERTs.
+- Transaction batches: ~12x faster.
+- iostat peak: 64818 kB/s written on nvme1n1.
+- Rollback test: 0 rows remained after a NOT NULL violation and ROLLBACK.
+
+### Key takeaway
+Batching reduces SQL communication and transaction overhead. Grouping INSERTs into transactions improves throughput, but multi-row INSERTs were faster because they also reduced the number of SQL statements. WAL provides durability while database pages can be written later.
+
+
 ## Completed Weeks
 
 | Week | Status | Key takeaway | Main artifact |
@@ -187,7 +217,8 @@ Linux separates filenames from file identity through inodes. Filesystems are mou
 | 4 | Completed | | |
 | 5 | Completed | | |
 | 6 | Completed | | |
-| 7 | Not started | | |
+| 7 | Completed | | |
+| 8 | Not Started | | |
 
 ## Skills Matrix
 Scale:
@@ -201,7 +232,7 @@ Scale:
 | Area | Level | Evidence |
 |---|---:|---|
 | Linux processes | 2 | |
-| Linux filesystems | 0 | |
+| Linux filesystems | 1 | |
 | Linux networking | 0 | |
 | TCP/IP | 0 | |
 | DNS | 0 | |
