@@ -151,6 +151,32 @@ Antal element	Sekventiellt	Slumpmässigt
 ### Key takeaway
 Sekventiell minnesåtkomst utnyttjar spatial locality och CPU-cache effektivt. För 10 miljoner element tog slumpmässig indexering nästan 10 gånger så lång tid. En del av skillnaden kan också bero på den extra index-slicen, så resultatet är inte ett direkt mått på cache misses.
 
+### Week 7 — Filesystems
+
+**Status:** Completed  
+**Time:** 3
+
+#### Done
+- [x] Read How Linux Works, chapter 4 (selected sections).
+- [x] Investigated inodes, hard links and symbolic links.
+- [x] Tested broken symlink after deleting original file.
+- [x] Inspected filesystems using stat, lsblk, df, du and findmnt.
+- [x] Built Go benchmark comparing Write and Sync.
+- [x] Wrote docs/learning/filesystems.md.
+
+#### Key evidence
+
+- Hard links shared inode 11801; symlink used inode 11948.
+- Removing original.txt reduced link count from 2 to 1.
+- /tmp used tmpfs; /home used Btrfs.
+- Buffered: ~6 ms (1000 writes + 1 sync).
+- Synced: ~987 ms (1000 writes + 1000 sync).
+- Synced was ~165x slower.
+
+### Key takeaway
+Linux separates filenames from file identity through inodes. Filesystems are mounted into a shared directory tree. Page cache makes writes efficient, while fsync provides stronger durability guarantees at the cost of latency.
+
+
 ## Completed Weeks
 
 | Week | Status | Key takeaway | Main artifact |

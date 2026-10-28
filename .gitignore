@@ -12,3 +12,6 @@ cheatsheet.md
 PROJECT_GUIDE.md
 #Kompilerad fil
 bin/
+
+# lab files
+labs/filesystem/*.dat
