@@ -207,6 +207,37 @@ Linux separates filenames from file identity through inodes. Filesystems are mou
 Batching reduces SQL communication and transaction overhead. Grouping INSERTs into transactions improves throughput, but multi-row INSERTs were faster because they also reduced the number of SQL statements. WAL provides durability while database pages can be written later.
 
 
+### Week 9 — systemd
+
+**Status:** Completed
+**Time:** 3 hours
+
+#### Done
+- [x] Read selected sections of How Linux Works, chapters 6–7.
+- [x] Created internship-tracker.service.
+- [x] Started Go API through systemd on Fedora.
+- [x] Debugged SELinux permissions and EnvironmentFile.
+- [x] Tested graceful shutdown using systemctl stop.
+- [x] Tested automatic restart after SIGKILL.
+- [x] Inspected PID, PPID and cgroup.
+- [x] Created dedicated system user internship-api.
+- [x] Verified restricted file access and HTTP health endpoint.
+- [x] Enabled service autostart.
+- [x] Wrote docs/learning/system.md.
+
+#### Key evidence
+- SIGTERM: graceful shutdown, database connection closed.
+- SIGKILL: PID 201193 → 202062 after 3 seconds.
+- SELinux denied access to user_home_t files.
+- Service ran as internship-api with PPID 1.
+- /home/theodor: Permission denied for internship-api.
+- HTTP /health: 200 OK.
+- systemctl is-enabled: enabled.
+
+### Key takeaway
+Systemd manages the lifecycle of Linux services through units. It starts, monitors, stops and restarts processes. journald helps diagnose failures, while SELinux, file permissions and dedicated service users enforce security boundaries.
+
+
 ## Completed Weeks
 
 | Week | Status | Key takeaway | Main artifact |
@@ -218,7 +249,7 @@ Batching reduces SQL communication and transaction overhead. Grouping INSERTs in
 | 5 | Completed | | |
 | 6 | Completed | | |
 | 7 | Completed | | |
-| 8 | Not Started | | |
+| 8 | Completed | | |
 
 ## Skills Matrix
 Scale:

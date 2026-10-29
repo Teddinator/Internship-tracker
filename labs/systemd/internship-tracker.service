@@ -1,0 +1,13 @@
+[Unit]
+Description=Internship Tracker Go API
+
+[Service]
+Type=exec
+User=internship-api
+ExecStart=/usr/local/bin/internship-tracker
+EnvironmentFile=/etc/sysconfig/internship-tracker
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
