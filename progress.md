@@ -1,7 +1,7 @@
 # Systems Engineering Progress
 
 ## Current status
-**Current week:** 8 
+**Current week:** 12 
 **Current phase:** Linux and Operating Systems  
 **Started:** 2026-09-21  
 **Target weekly time:** ~10h  
@@ -238,6 +238,32 @@ Batching reduces SQL communication and transaction overhead. Grouping INSERTs in
 Systemd manages the lifecycle of Linux services through units. It starts, monitors, stops and restarts processes. journald helps diagnose failures, while SELinux, file permissions and dedicated service users enforce security boundaries.
 
 
+### Week 10 — Cgroups
+
+**Status:** Completed
+**Time:** 2 hours
+
+#### Done
+- [x] Studied cgroups v2, controllers and namespaces.
+- [x] Built Go programs for CPU and memory experiments.
+- [x] Tested CPUQuota=50% using systemd-run.
+- [x] Verified CPU throttling through cpu.stat.
+- [x] Tested MemoryMax=50M and MemorySwapMax=0.
+- [x] Observed memory.current and triggered an OOM-kill.
+- [x] Wrote docs/learning/cgroups.md.
+
+#### Key evidence
+- CPU baseline: 498 ms elapsed, 502 ms CPU time.
+- CPUQuota=50%: 953 ms elapsed, 498 ms CPU time.
+- cpu.max: 50000 100000.
+- CPU throttling: 607/607 periods.
+- MemoryMax=50M: OOM-kill after 40 MiB allocated.
+- systemd reported status=9/KILL and result=oom-kill.
+
+### Key takeaway
+Cgroups v2 manage resources for groups of processes. CPU limits cause throttling and longer execution times, while hard memory limits can trigger OOM-kill. Systemd provides a convenient interface for configuring these kernel mechanisms.
+
+
 ## Completed Weeks
 
 | Week | Status | Key takeaway | Main artifact |
@@ -250,6 +276,10 @@ Systemd manages the lifecycle of Linux services through units. It starts, monito
 | 6 | Completed | | |
 | 7 | Completed | | |
 | 8 | Completed | | |
+| 9 | Completed | | |
+| 10 | Completed | | |
+| 11 | Not Started | | |
+| 12 | In Progress | | |
 
 ## Skills Matrix
 Scale:
